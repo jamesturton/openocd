@@ -109,6 +109,8 @@ extern struct target_type esp32s2_target;
 extern struct target_type or1k_target;
 extern struct target_type quark_x10xx_target;
 extern struct target_type quark_d20xx_target;
+extern struct target_type mpc56xx_target;
+extern struct target_type mpc57xx_target;
 extern struct target_type stm8_target;
 extern struct target_type riscv_target;
 extern struct target_type mem_ap_target;
@@ -153,6 +155,8 @@ static struct target_type *target_types[] = {
 	&arcv2_target,
 	&aarch64_target,
 	&mips_mips64_target,
+	&mpc56xx_target,
+	&mpc57xx_target,
 	NULL,
 };
 
