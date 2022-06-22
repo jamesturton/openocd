@@ -273,7 +273,7 @@ MPC57XX_SRC = \
 	%D%/mpc56xx.h \
 	%D%/mpc57xx_regs.h \
 	%D%/mpc57xx_jtag.h \
-	%D%/mpc57xx.h
+	%D%/mpc57xx.h \
 	%D%/esirisc.h \
 	%D%/esirisc_jtag.h \
 	%D%/esirisc_regs.h \

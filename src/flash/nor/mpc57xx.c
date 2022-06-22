@@ -227,8 +227,7 @@ static int mpc57xx_protect_check(struct flash_bank *bank)
 
 	/*uint32_t config0_address;
 	uint32_t devcfg0;*/
-	int s;
-	int num_pages;
+	unsigned int s, num_pages;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -402,14 +401,14 @@ static int mpc57xx_flash_set_sr(struct flash_bank *bank, uint32_t block_num)
 	return ERROR_OK;
 }
 
-static int mpc57xx_erase(struct flash_bank *bank, int first, int last)
+static int mpc57xx_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 {
 	struct target *target = bank->target;
 	struct mpc57xx_flash_bank *mpc57xx_info = bank->driver_priv;
 	int retval, retry;
 	uint32_t val;
 	uint32_t reg_base;
-	int block_num;
+	unsigned int block_num;
 
 	printf("Got a call to erase!\n");
 
@@ -476,7 +475,7 @@ static int mpc57xx_erase(struct flash_bank *bank, int first, int last)
 	return ERROR_OK;
 }
 
-static int mpc57xx_protect(struct flash_bank *bank, int set, int first, int last)
+static int mpc57xx_protect(struct flash_bank *bank, int set, unsigned int first, unsigned int last)
 {
 	struct target *target = bank->target;
 
@@ -491,7 +490,8 @@ static int mpc57xx_protect(struct flash_bank *bank, int set, int first, int last
 /* Determines sector details give a flash address */
 static int mpc57xx_get_sect(struct flash_bank *bank, uint32_t address, uint32_t *start, uint32_t *end)
 {
-	int i, block_num;
+	unsigned int i;
+	int block_num;
 	uint32_t sec_start, sec_end;
 
 	sec_start = 0;
@@ -534,7 +534,7 @@ static int mpc57xx_write(struct flash_bank *bank, const uint8_t *buffer, uint32_
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	LOG_DEBUG("writing to flash at address 0x%08" PRIx32 " at offset 0x%8.8" PRIx32
+	LOG_DEBUG("writing to flash at address " TARGET_ADDR_FMT " at offset 0x%8.8" PRIx32
 			" count: 0x%8.8" PRIx32 "", bank->base, offset, count);
 
 	if (offset & 0x7) {
@@ -674,19 +674,19 @@ static int mpc57xx_auto_probe(struct flash_bank *bank)
 	return mpc57xx_probe(bank);
 }
 
-static int mpc57xx_info(struct flash_bank *bank, char *buf, int buf_size)
+static int mpc57xx_info(struct flash_bank *bank, struct command_invocation *cmd)
 {
 	/*struct target *target = bank->target;
 	struct mpc5634_common *mpc5634 = target->arch_info;
 	struct mpc5634_jtag *jtag_info = &mpc5634->jtag;*/
 	uint32_t device_id;
-	int printed = 0, i;
+	int i;
 
 	/*device_id = jtag_info->idcode;*/
 	device_id = 0x87654321;
 
 	if (((device_id >> 1) & 0x7ff) != MPC57XX_MANUF_ID) {
-		snprintf(buf, buf_size,
+		command_print_sameline(cmd,
 				 "Cannot identify target as a MPC57XX family (manufacturer 0x%03d != 0x%03d)\n",
 				 (unsigned)((device_id >> 1) & 0x7ff),
 				 MPC57XX_MANUF_ID);
@@ -695,17 +695,15 @@ static int mpc57xx_info(struct flash_bank *bank, char *buf, int buf_size)
 
 	for (i = 0; mpc57xx_devs[i].name != NULL; i++) {
 		if (mpc57xx_devs[i].devid == (device_id & 0x0fffffff)) {
-			printed = snprintf(buf, buf_size, "MPC57XX%s", mpc57xx_devs[i].name);
+			command_print_sameline(cmd, "MPC57XX%s", mpc57xx_devs[i].name);
 			break;
 		}
 	}
 
 	if (mpc57xx_devs[i].name == NULL)
-		printed = snprintf(buf, buf_size, "Unknown");
+		command_print_sameline(cmd, "Unknown");
 
-	buf += printed;
-	buf_size -= printed;
-	snprintf(buf, buf_size, " Ver: 0x%02x",
+	command_print_sameline(cmd, " Ver: 0x%02x",
 			(unsigned)((device_id >> 28) & 0xf));
 
 	return ERROR_OK;
@@ -729,7 +727,7 @@ COMMAND_HANDLER(mpc57xx_handle_pgm_word_command)
 		return retval;
 
 	if (address < bank->base || address >= (bank->base + bank->size)) {
-		command_print(CMD_CTX, "flash address '%s' is out of bounds", CMD_ARGV[0]);
+		command_print(CMD, "flash address '%s' is out of bounds", CMD_ARGV[0]);
 		return ERROR_OK;
 	}
 
@@ -741,9 +739,9 @@ COMMAND_HANDLER(mpc57xx_handle_pgm_word_command)
 		res = ERROR_FLASH_OPERATION_FAILED;
 
 	if (res == ERROR_OK)
-		command_print(CMD_CTX, "mpc57xx pgm word complete");
+		command_print(CMD, "mpc57xx pgm word complete");
 	else
-		command_print(CMD_CTX, "mpc57xx pgm word failed (status = 0x%x)", status);
+		command_print(CMD, "mpc57xx pgm word failed (status = 0x%x)", status);
 
 	return ERROR_OK;
 }
@@ -758,7 +756,7 @@ COMMAND_HANDLER(mpc57xx_handle_unlock_command)
 	int timeout = 10;*/
 
 	if (CMD_ARGC < 1) {
-		command_print(CMD_CTX, "mpc57xx unlock <bank>");
+		command_print(CMD, "mpc57xx unlock <bank>");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -783,7 +781,7 @@ return ERROR_FAIL;
 	mips_ejtag_drscan_8(ejtag_info, &mchip_cmd);
 	if (mchip_cmd & (1 << 7)) {
 		/* device is not locked */
-		command_print(CMD_CTX, "mpc57xx is already unlocked, erasing anyway");
+		command_print(CMD, "mpc57xx is already unlocked, erasing anyway");
 	}
 
 	/* unlock/erase device */
@@ -807,7 +805,7 @@ return ERROR_FAIL;
 	/* select ejtag tap */
 	mips_ejtag_set_instr(ejtag_info, MTAP_SW_ETAP);
 
-	command_print(CMD_CTX, "mpc57xx unlocked.\n"
+	command_print(CMD, "mpc57xx unlocked.\n"
 			"INFO: a reset or power cycle is required "
 			"for the new settings to take effect.");
 

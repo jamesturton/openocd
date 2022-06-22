@@ -573,7 +573,7 @@ static int mpc56xx_set_breakpoint(struct target *target,
 	struct mpc5xxx_comparator *comparator_list = mpc56xx->inst_break_list;
 	int retval;
 
-	if (breakpoint->set) {
+	if (breakpoint->is_set) {
 		LOG_WARNING("breakpoint already set");
 		return ERROR_OK;
 	}
@@ -588,7 +588,7 @@ static int mpc56xx_set_breakpoint(struct target *target,
 					breakpoint->unique_id);
 			return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
 		}
-		breakpoint->set = bp_num + 1;
+		breakpoint_hw_set(breakpoint, bp_num);
 		comparator_list[bp_num].used = 1;
 		comparator_list[bp_num].bp_value = breakpoint->address;
 
@@ -642,7 +642,7 @@ static int mpc56xx_set_breakpoint(struct target *target,
 			}
 		}
 
-		breakpoint->set = 20; /* Any nice value but 0 */
+		breakpoint->is_set = true;
 	}
 
 	return ERROR_OK;
@@ -654,7 +654,7 @@ static int mpc56xx_enable_breakpoints(struct target *target)
 
 	/* set any pending breakpoints */
 	while (breakpoint) {
-		if (breakpoint->set == 0)
+		if (!breakpoint->is_set)
 			mpc56xx_set_breakpoint(target, breakpoint);
 		breakpoint = breakpoint->next;
 	}
@@ -669,14 +669,14 @@ static int mpc56xx_unset_breakpoint(struct target *target,
 	struct mpc5xxx_comparator *comparator_list = mpc56xx->inst_break_list;
 	int retval;
 
-	if (!breakpoint->set) {
+	if (!breakpoint->is_set) {
 		LOG_WARNING("breakpoint not set");
 		return ERROR_OK;
 	}
 
 	if (breakpoint->type == BKPT_HARD) {
-		int bp_num = breakpoint->set - 1;
-		if ((bp_num < 0) || (bp_num >= mpc56xx->num_inst_bpoints)) {
+		int bp_num = breakpoint->number;
+		if (bp_num >= mpc56xx->num_inst_bpoints) {
 			LOG_DEBUG("Invalid FP Comparator number in breakpoint (bpid: %" PRIu32 ")",
 					  breakpoint->unique_id);
 			return ERROR_OK;
@@ -732,7 +732,7 @@ static int mpc56xx_unset_breakpoint(struct target *target,
 			}*/
 		}
 	}
-	breakpoint->set = 0;
+	breakpoint->is_set = false;
 
 	return ERROR_OK;
 }
@@ -765,7 +765,7 @@ static int mpc56xx_remove_breakpoint(struct target *target,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (breakpoint->set)
+	if (breakpoint->is_set)
 		mpc56xx_unset_breakpoint(target, breakpoint);
 
 	if (breakpoint->type == BKPT_HARD)
@@ -862,7 +862,7 @@ static int mpc56xx_set_watchpoint(struct target *target,
 	struct mpc5xxx_comparator *comparator_list = mpc56xx->data_break_list;
 	int retval;
 
-	if (watchpoint->set) {
+	if (watchpoint->is_set) {
 		LOG_WARNING("watchpoint already set");
 		return ERROR_OK;
 	}
@@ -876,7 +876,7 @@ static int mpc56xx_set_watchpoint(struct target *target,
 				watchpoint->unique_id);
 		return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
 	}
-	watchpoint->set = wp_num + 1;
+	watchpoint_set(watchpoint, wp_num);
 	comparator_list[wp_num].used = 1;
 	comparator_list[wp_num].bp_value = watchpoint->address;
 
@@ -889,7 +889,7 @@ static int mpc56xx_set_watchpoint(struct target *target,
 			  watchpoint->unique_id,
 			  wp_num, comparator_list[wp_num].bp_value);
 
-	watchpoint->set = 20; /* Any nice value but 0 */
+	watchpoint->is_set = true;
 
 	return ERROR_OK;
 }
@@ -900,7 +900,7 @@ static int mpc56xx_enable_watchpoints(struct target *target)
 
 	/* set any pending breakpoints */
 	while (watchpoint) {
-		if (watchpoint->set == 0)
+		if (!watchpoint->is_set)
 			mpc56xx_set_watchpoint(target, watchpoint);
 		watchpoint = watchpoint->next;
 	}
@@ -914,13 +914,13 @@ static int mpc56xx_unset_watchpoint(struct target *target,
 	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
 	struct mpc5xxx_comparator *comparator_list = mpc56xx->data_break_list;
 
-	if (!watchpoint->set) {
+	if (!watchpoint->is_set) {
 		LOG_WARNING("breakpoint not set");
 		return ERROR_OK;
 	}
 
-	int wp_num = watchpoint->set - 1;
-	if ((wp_num < 0) || (wp_num >= mpc56xx->num_data_bpoints)) {
+	int wp_num = watchpoint->number;
+	if (wp_num >= mpc56xx->num_data_bpoints) {
 		LOG_DEBUG("Invalid FP Comparator number in breakpoint (wpid: %" PRIu32 ")",
 				  watchpoint->unique_id);
 		return ERROR_OK;
@@ -933,7 +933,7 @@ static int mpc56xx_unset_watchpoint(struct target *target,
 		/*target_write_u32(target, comparator_list[bp_num].reg_address +*/
 				/* ejtag_info->ejtag_ibc_offs, 0);*/
 
-	watchpoint->set = 0;
+	watchpoint->is_set = false;
 
 	return ERROR_OK;
 }
@@ -964,7 +964,7 @@ static int mpc56xx_remove_watchpoint(struct target *target,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (watchpoint->set)
+	if (watchpoint->is_set)
 		mpc56xx_unset_watchpoint(target, watchpoint);
 
 	mpc56xx->num_inst_bpoints_avail++;

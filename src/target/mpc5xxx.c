@@ -354,6 +354,8 @@ int mpc5xxx_examine(struct target *target)
 			target->state = TARGET_RUNNING;
 	}
 
+	printf("examine done!\n");
+
 	return ERROR_OK;
 }
 
