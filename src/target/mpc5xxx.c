@@ -220,8 +220,9 @@ struct reg_cache *mpc5xxx_build_reg_cache(struct target *target)
 		reg_list[i].name = mpc5xxx_core_reg_list[i];
 		reg_list[i].size = 32;
 		reg_list[i].value = calloc(1, 4);
-		reg_list[i].dirty = 0;
-		reg_list[i].valid = 0;
+		reg_list[i].dirty = false;
+		reg_list[i].valid = false;
+		reg_list[i].exist = true;
 		reg_list[i].type = &mpc5xxx_reg_type;
 		reg_list[i].arch_info = &arch_info[i];
 	}
