@@ -23,7 +23,6 @@
 
 #include "target.h"
 #include "jtag/jtag.h"
-#include "mpc56xx_jtag.h"
 #include "mpc57xx_jtag.h"
 #include "jtag/interface.h"
 
@@ -34,7 +33,7 @@ int mpc57xx_enter_debug(struct mpc5xxx_jtag *jtag_info, int async_flag)
 	int res;
 	printf("got call to enter_debug\n");
 
-	res = mpc56xx_enable_once(jtag_info);
+	res = mpc57xx_enable_once(jtag_info);
 	if (res)
 		return res;
 
@@ -63,6 +62,33 @@ int mpc57xx_enter_debug(struct mpc5xxx_jtag *jtag_info, int async_flag)
 		return res;
 	/* Take control of all debug resources */
 	res = mpc5xxx_once_write(jtag_info, MPC57XX_ONCE_EDBRAC0, MPC57XX_ONCE_EDBRAC0_DEFAULT, 32);
+	if (res)
+		return res;
+
+	return ERROR_OK;
+}
+
+/* Sends the enable_once command to the OnCE controller.
+ * Freescale datasheets very unclear on whether this is required or how to
+ * use it.
+ */
+int mpc57xx_enable_once(struct mpc5xxx_jtag *jtag_info)
+{
+	int res;
+	uint32_t val;
+
+	res = mpc5xxx_jtag_access_once(jtag_info);
+	if (res)
+		return res;
+
+	res = mpc5xxx_jtag_set_instr(jtag_info, MPC57XX_ONCE_ENABLE);
+	if (res)
+		return res;
+
+	/* Then scan through DR stage like exec */
+
+	/* dummy read of one bit to force update-DR */
+	res = mpc5xxx_jtag_read_data(jtag_info, &val, 1);
 	if (res)
 		return res;
 
