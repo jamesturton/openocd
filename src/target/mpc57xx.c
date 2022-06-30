@@ -87,7 +87,7 @@ static int mpc57xx_debug_entry(struct target *target, int async_flag)
 	/* Here we need to determine which OnCE we want to talk to.
 	 * FIXME. Need to add support for SMP.
 	 */
-	mpc57xx->jtag.once = MPC57XX_TAP_ONCE1; /* Default to CPU1 */
+	mpc57xx->jtag.once = MPC57XX_TAP_ONCE0; /* Default to CPU0 */
 	mpc57xx->jtag.current_tap = MPC5XXX_TAP_INVALID; /* Invalid to force TAP selection */
 	mpc57xx->jtag.jtag_irlen = 6;
 
