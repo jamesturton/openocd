@@ -608,6 +608,9 @@ static void ftdi_execute_stableclocks(struct jtag_command *cmd)
 static void ftdi_execute_command(struct jtag_command *cmd)
 {
 	switch (cmd->type) {
+		case JTAG_RESET:
+			ftdi_reset(cmd->cmd.reset->trst, cmd->cmd.reset->srst);
+			break;
 		case JTAG_RUNTEST:
 			ftdi_execute_runtest(cmd);
 			break;
