@@ -39,13 +39,13 @@ int mpc57xx_enter_debug(struct mpc5xxx_jtag *jtag_info, int async_flag)
 
 	if (async_flag) {
 		/* WKUP, DR */
-		res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DEBUG1, 32);
+		res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DR | MPC5XXX_OCR_WKUP, 32);
 		if (res)
 			return res;
 	}
 
 	/* was WKUP, FDB only */
-	res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DEBUG2 | 1, 32);
+	res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DR | MPC5XXX_OCR_FDB | MPC5XXX_OCR_WKUP | 1, 32);
 	if (res)
 		return res;
 
@@ -213,9 +213,9 @@ int mpc57xx_exit_debug(struct mpc5xxx_jtag *jtag_info, uint32_t addr, int sw_bp,
 	uint32_t val;
 
 	if (sw_bp)
-		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DEBUG2, 32); /* leave SW BPs on */
+		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_WKUP | MPC5XXX_OCR_FDB, 32); /* leave SW BPs on */
 	else
-		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DEBUG_OFF, 32);
+		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_WKUP, 32);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -272,9 +272,9 @@ int mpc57xx_exit_debug(struct mpc5xxx_jtag *jtag_info, uint32_t addr, int sw_bp,
 		return retval;
 
 	if (sw_bp)
-		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_FDB, 32); /* leave SW BPs on */
+		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_WKUP | MPC5XXX_OCR_FDB, 32); /* leave SW BPs on */
 	else
-		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DEBUG_OFF, 32);
+		retval = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_WKUP, 32);
 	if (retval != ERROR_OK)
 		return retval;
 

@@ -465,7 +465,7 @@ static int mpc57xx_deassert_reset(struct target *target)
 		LOG_DEBUG("Enabled debug after reset");
 	} else {
 		/* Ensure those bits are clear */
-		retval = mpc5xxx_once_write(&mpc57xx->jtag, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DEBUG_OFF, 32);
+		retval = mpc5xxx_once_write(&mpc57xx->jtag, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_WKUP, 32);
 		if (retval)
 			return retval;
 		LOG_DEBUG("Disabled debug after reset");

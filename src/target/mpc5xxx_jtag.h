@@ -38,10 +38,9 @@
 #define MPC5XXX_ONCE_NEXUS_RWCS_DVMASK	0x00000001	/* DV mask */
 #define MPC5XXX_ONCE_NEXUS_RWCS_READOK 0x00000001
 #define MPC5XXX_ONCE_NEXUS_RWCS_WRITEOK 0x00000000
-#define MPC5XXX_OCR_DEBUG1	0x05
-#define MPC5XXX_OCR_DEBUG2	0x06
-#define MPC5XXX_OCR_DEBUG_OFF	0x04 /* Still leave WKUP bit set */
+#define MPC5XXX_OCR_WKUP	0x04 /* Still leave WKUP bit set */
 #define MPC5XXX_OCR_FDB	0x02 /* Allow SW BPs */
+#define MPC5XXX_OCR_DR	0x01 /* Unconditional Debug Mode */
 
 /* Some ONCE registers are the same */
 #define MPC5XXX_ONCE_DID	0b0000010
