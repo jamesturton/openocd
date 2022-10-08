@@ -134,7 +134,7 @@ target_to_mpc5xxx(struct target *target)
 struct mpc5xxx_core_reg {
 	uint32_t num;
 	struct target *target;
-	struct mpc5xxx_common *mpc56xx_common;
+	struct mpc5xxx_common *mpc5xxx_common;
 };
 
 extern const char * const mpc5xxx_core_reg_list[];

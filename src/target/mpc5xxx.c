@@ -46,8 +46,8 @@ const char * const mpc5xxx_core_reg_list[] = {
 	"pc",  "msr", "cnd", "lr",  "cnt", "xer", "mq",  "r71",
 };
 
-static const struct mpc5xxx_core_reg
-	mpc56xx_core_reg_list_arch_info[MPC5XXX_NUMCOREREGS] = {
+const struct mpc5xxx_core_reg
+	mpc5xxx_core_reg_list_arch_info[MPC5XXX_NUMCOREREGS] = {
 	{0, NULL, NULL},
 	{1, NULL, NULL},
 	{2, NULL, NULL},
@@ -127,15 +127,15 @@ int mpc5xxx_read_core_reg(struct target *target, int num)
 	uint32_t reg_value;
 
 	/* get pointers to arch-specific information */
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 
 	if ((num < 0) || (num >= MPC5XXX_NUMCOREREGS))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	reg_value = mpc56xx->core_regs[num];
-	buf_set_u32(mpc56xx->core_cache->reg_list[num].value, 0, 32, reg_value);
-	mpc56xx->core_cache->reg_list[num].valid = 1;
-	mpc56xx->core_cache->reg_list[num].dirty = 0;
+	reg_value = mpc5xxx->core_regs[num];
+	buf_set_u32(mpc5xxx->core_cache->reg_list[num].value, 0, 32, reg_value);
+	mpc5xxx->core_cache->reg_list[num].valid = 1;
+	mpc5xxx->core_cache->reg_list[num].dirty = 0;
 
 	return ERROR_OK;
 }
@@ -145,16 +145,16 @@ int mpc5xxx_write_core_reg(struct target *target, int num)
 	uint32_t reg_value;
 
 	/* get pointers to arch-specific information */
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 
 	if ((num < 0) || (num >= MPC5XXX_NUMCOREREGS))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	reg_value = buf_get_u32(mpc56xx->core_cache->reg_list[num].value, 0, 32);
-	mpc56xx->core_regs[num] = reg_value;
+	reg_value = buf_get_u32(mpc5xxx->core_cache->reg_list[num].value, 0, 32);
+	mpc5xxx->core_regs[num] = reg_value;
 	LOG_DEBUG("write core reg %i value 0x%" PRIx32 "", num, reg_value);
-	mpc56xx->core_cache->reg_list[num].valid = 1;
-	mpc56xx->core_cache->reg_list[num].dirty = 0;
+	mpc5xxx->core_cache->reg_list[num].valid = 1;
+	mpc5xxx->core_cache->reg_list[num].dirty = 0;
 
 	return ERROR_OK;
 }
@@ -162,21 +162,21 @@ int mpc5xxx_write_core_reg(struct target *target, int num)
 int mpc5xxx_get_core_reg(struct reg *reg)
 {
 	int retval;
-	struct mpc5xxx_core_reg *mpc56xx_reg = reg->arch_info;
-	struct target *target = mpc56xx_reg->target;
+	struct mpc5xxx_core_reg *mpc5xxx_reg = reg->arch_info;
+	struct target *target = mpc5xxx_reg->target;
 
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
-	retval = mpc5xxx_read_core_reg(target, mpc56xx_reg->num);
+	retval = mpc5xxx_read_core_reg(target, mpc5xxx_reg->num);
 
 	return retval;
 }
 
 int mpc5xxx_set_core_reg(struct reg *reg, uint8_t *buf)
 {
-	struct mpc5xxx_core_reg *mpc56xx_reg = reg->arch_info;
-	struct target *target = mpc56xx_reg->target;
+	struct mpc5xxx_core_reg *mpc5xxx_reg = reg->arch_info;
+	struct target *target = mpc5xxx_reg->target;
 	uint32_t value = buf_get_u32(buf, 0, 32);
 
 	if (target->state != TARGET_HALTED)
@@ -197,7 +197,7 @@ const struct reg_arch_type mpc5xxx_reg_type = {
 struct reg_cache *mpc5xxx_build_reg_cache(struct target *target)
 {
 	int num_regs = MPC5XXX_NUMCOREREGS;
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 	struct reg_cache **cache_p = register_get_last_cache_p(&target->reg_cache);
 	struct reg_cache *cache = malloc(sizeof(struct reg_cache));
 	struct reg *reg_list = calloc(num_regs, sizeof(struct reg));
@@ -211,12 +211,12 @@ struct reg_cache *mpc5xxx_build_reg_cache(struct target *target)
 	cache->reg_list = reg_list;
 	cache->num_regs = num_regs;
 	(*cache_p) = cache;
-	mpc56xx->core_cache = cache;
+	mpc5xxx->core_cache = cache;
 
 	for (i = 0; i < num_regs; i++) {
-		arch_info[i] = mpc56xx_core_reg_list_arch_info[i];
+		arch_info[i] = mpc5xxx_core_reg_list_arch_info[i];
 		arch_info[i].target = target;
-		arch_info[i].mpc56xx_common = mpc56xx;
+		arch_info[i].mpc5xxx_common = mpc5xxx;
 		reg_list[i].name = mpc5xxx_core_reg_list[i];
 		reg_list[i].size = 32;
 		reg_list[i].value = calloc(1, 4);
@@ -232,15 +232,15 @@ struct reg_cache *mpc5xxx_build_reg_cache(struct target *target)
 
 int mpc5xxx_assert_reset(struct target *target)
 {
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 	int retval;
 
-	printf("mpc56xx_assert_reset\n");
+	printf("mpc5xxx_assert_reset\n");
 
 	adapter_assert_reset();
 
 	/* Init code wants to be talking to JTAGC. */
-	retval = mpc5xxx_jtag_access_jtagc(&mpc56xx->jtag);
+	retval = mpc5xxx_jtag_access_jtagc(&mpc5xxx->jtag);
 	if (retval)
 		return retval;
 
@@ -250,7 +250,7 @@ int mpc5xxx_assert_reset(struct target *target)
 int mpc5xxx_read_memory(struct target *target, target_addr_t address,
 	uint32_t size, uint32_t count, uint8_t *buffer)
 {
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 
 	LOG_DEBUG("address: 0x%8.8" PRIx32 ", size: 0x%8.8" PRIx32 ", count: 0x%8.8" PRIx32 "",
 		(unsigned int)address,
@@ -266,15 +266,15 @@ int mpc5xxx_read_memory(struct target *target, target_addr_t address,
 
 	switch (size) {
 		case 4:
-			return mpc5xxx_jtag_read_memory32(&mpc56xx->jtag, address, count,
+			return mpc5xxx_jtag_read_memory32(&mpc5xxx->jtag, address, count,
 				(uint32_t *)(void *)buffer);
 			break;
 		case 2:
-			return mpc5xxx_jtag_read_memory16(&mpc56xx->jtag, address, count,
+			return mpc5xxx_jtag_read_memory16(&mpc5xxx->jtag, address, count,
 				(uint16_t *)(void *)buffer);
 			break;
 		case 1:
-			return mpc5xxx_jtag_read_memory8(&mpc56xx->jtag, address, count, buffer);
+			return mpc5xxx_jtag_read_memory8(&mpc5xxx->jtag, address, count, buffer);
 			break;
 		default:
 			break;
@@ -286,7 +286,7 @@ int mpc5xxx_read_memory(struct target *target, target_addr_t address,
 int mpc5xxx_write_memory(struct target *target, target_addr_t address,
 	uint32_t size, uint32_t count, const uint8_t *buffer)
 {
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 
 	LOG_DEBUG("address: 0x%8.8" PRIx32 ", size: 0x%8.8" PRIx32 ", count: 0x%8.8" PRIx32 "",
 		(unsigned int)address,
@@ -302,15 +302,15 @@ int mpc5xxx_write_memory(struct target *target, target_addr_t address,
 
 	switch (size) {
 		case 4:
-			return mpc5xxx_jtag_write_memory32(&mpc56xx->jtag, address, count,
+			return mpc5xxx_jtag_write_memory32(&mpc5xxx->jtag, address, count,
 				(uint32_t *)(void *)buffer);
 			break;
 		case 2:
-			return mpc5xxx_jtag_write_memory16(&mpc56xx->jtag, address, count,
+			return mpc5xxx_jtag_write_memory16(&mpc5xxx->jtag, address, count,
 				(uint16_t *)(void *)buffer);
 			break;
 		case 1:
-			return mpc5xxx_jtag_write_memory8(&mpc56xx->jtag, address, count, buffer);
+			return mpc5xxx_jtag_write_memory8(&mpc5xxx->jtag, address, count, buffer);
 			break;
 		default:
 			break;
@@ -322,32 +322,32 @@ int mpc5xxx_write_memory(struct target *target, target_addr_t address,
 int mpc5xxx_init_target(struct command_context *cmd_ctx,
 	struct target *target)
 {
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 	printf("init_target\n");
-	mpc56xx->jtag.tap = target->tap; /* why? */
+	mpc5xxx->jtag.tap = target->tap; /* why? */
 	mpc5xxx_build_reg_cache(target);
-	/* mpc56xx->num_inst_bpoints_avail = 2; */
+	/* mpc5xxx->num_inst_bpoints_avail = 2; */
 	return ERROR_OK;
 }
 
 int mpc5xxx_examine(struct target *target)
 {
 	uint32_t osr;
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 	printf("examine\n");
 	if (!target_was_examined(target)) {
 
 		target_set_examined(target);
 
 		/* we will configure later */
-		mpc56xx->bp_scanned = 0;
-		mpc56xx->num_inst_bpoints = 0;
-		mpc56xx->num_data_bpoints = 0;
-		mpc56xx->num_inst_bpoints_avail = 0;
-		mpc56xx->num_data_bpoints_avail = 0;
+		mpc5xxx->bp_scanned = 0;
+		mpc5xxx->num_inst_bpoints = 0;
+		mpc5xxx->num_data_bpoints = 0;
+		mpc5xxx->num_inst_bpoints_avail = 0;
+		mpc5xxx->num_data_bpoints_avail = 0;
 
 		/* Check if processor halted. */
-		mpc5xxx_once_osr_read(&mpc56xx->jtag, &osr);
+		mpc5xxx_once_osr_read(&mpc5xxx->jtag, &osr);
 		if (osr & MPC5XXX_OSR_HALT_DEBUG) { /* FIXME say halted if in DEBUG mode */
 			LOG_INFO("target is halted/debug");
 			target->state = TARGET_HALTED;
@@ -362,10 +362,10 @@ int mpc5xxx_examine(struct target *target)
 
 int mpc5xxx_arch_state(struct target *target)
 {
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 
 	LOG_USER("target halted due to %s, pc: 0x%8.8" PRIx32 "",
-		debug_reason_name(target), mpc56xx->jtag.dpc);
+		debug_reason_name(target), mpc5xxx->jtag.dpc);
 
 	return ERROR_OK;
 }
@@ -375,7 +375,7 @@ int mpc5xxx_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 		int *reg_list_size, enum target_register_class reg_class)
 {
 	/* get pointers to arch-specific information */
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc5xxx = target_to_mpc5xxx(target);
 	unsigned int i;
 
 	/* include floating point registers */
@@ -383,7 +383,7 @@ int mpc5xxx_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 	*reg_list = malloc(sizeof(struct reg *) * (*reg_list_size));
 
 	for (i = 0; i < MPC5XXX_NUMCOREREGS; i++)
-		(*reg_list)[i] = &mpc56xx->core_cache->reg_list[i];
+		(*reg_list)[i] = &mpc5xxx->core_cache->reg_list[i];
 
 	return ERROR_OK;
 }
