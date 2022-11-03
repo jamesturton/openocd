@@ -1,4 +1,10 @@
 /***************************************************************************
+ *   Copyright (C) 2015 by James Turton                                    *
+ *   james.turton@gmx.com                                                  *
+ *                                                                         *
+ *   Copyright (C) 2015 by James Murray                                    *
+ * 	 james@nscc.info                                                       *
+ *                                                                         *
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
  *                                                                         *
@@ -21,8 +27,6 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
-
-/* MPC version (C) 2015 James Murray */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -52,48 +56,6 @@ struct mpc57xx_mem_layout {
 	uint32_t lock_sel_bit;
 };
 
-// static const struct mpc57xx_mem_layout mem_layout_array0[] = {
-// 	{0x00000000, 0x04000, 0x02, 0x00, 0x80000000},
-// 	{0x00004000, 0x04000, 0x02, 0x00, 0x40000000},
-// 	{0x00008000, 0x04000, 0x02, 0x00, 0x20000000},
-// 	{0x0000C000, 0x04000, 0x02, 0x00, 0x10000000},
-// 	{0x00010000, 0x04000, 0x03, 0x00, 0x08000000},
-// 	{0x00014000, 0x04000, 0x03, 0x00, 0x04000000},
-// 	{0x00018000, 0x04000, 0x03, 0x00, 0x02000000},
-// 	{0x0001C000, 0x04000, 0x03, 0x00, 0x01000000},
-// 	{0x00020000, 0x08000, 0x02, 0x00, 0x00800000},
-// 	{0x00028000, 0x08000, 0x03, 0x00, 0x00400000},
-// 	{0x00030000, 0x08000, 0x00, 0x00, 0x00002000},
-// 	{0x00038000, 0x08000, 0x00, 0x00, 0x00001000},
-// 	{0x00040000, 0x08000, 0x01, 0x00, 0x00000800},
-// 	{0x00048000, 0x08000, 0x01, 0x00, 0x00000400},
-// 	{0x00050000, 0x10000, 0x00, 0x00, 0x00000200},
-// 	{0x00060000, 0x10000, 0x01, 0x00, 0x00000080}
-// };
-// static const struct mpc57xx_mem_layout mem_layout_array1[] = {
-// 	{0x00070000, 0x40000, 0x06, 0x02, 0x80000000},
-// 	{0x000B0000, 0x40000, 0x06, 0x02, 0x40000000},
-// 	{0x000F0000, 0x40000, 0x06, 0x02, 0x20000000},
-// 	{0x00130000, 0x40000, 0x06, 0x02, 0x10000000},
-// 	{0x00170000, 0x40000, 0x06, 0x02, 0x08000000},
-// 	{0x001B0000, 0x40000, 0x06, 0x02, 0x04000000},
-// 	{0x001F0000, 0x40000, 0x06, 0x02, 0x02000000},
-// 	{0x00230000, 0x40000, 0x06, 0x02, 0x01000000},
-// 	{0x00270000, 0x40000, 0x07, 0x02, 0x00800000},
-// 	{0x002B0000, 0x40000, 0x07, 0x02, 0x00400000},
-// 	{0x002F0000, 0x40000, 0x07, 0x02, 0x00200000},
-// 	{0x00330000, 0x40000, 0x07, 0x02, 0x00100000},
-// 	{0x00370000, 0x40000, 0x07, 0x02, 0x00080000},
-// 	{0x003B0000, 0x40000, 0x07, 0x02, 0x00040000},
-// 	{0x003F0000, 0x40000, 0x07, 0x02, 0x00020000},
-// 	{0x00430000, 0x40000, 0x07, 0x02, 0x00010000},
-// 	{0x00470000, 0x40000, 0x08, 0x02, 0x00008000},
-// 	{0x004B0000, 0x40000, 0x08, 0x02, 0x00004000},
-// 	{0x004F0000, 0x40000, 0x08, 0x02, 0x00002000},
-// 	{0x00530000, 0x40000, 0x09, 0x02, 0x00001000},
-// 	{0x00570000, 0x40000, 0x09, 0x02, 0x00000800},
-// 	{0x005B0000, 0x40000, 0x09, 0x02, 0x00000400}
-// };
 static const struct mpc57xx_mem_layout mem_layout_array[] = {
 	{0x00000000, 0x04000, 0x02, 0x00, 0x00000001},
 	{0x00004000, 0x04000, 0x02, 0x00, 0x00000002},
@@ -180,22 +142,12 @@ static const struct mpc57xx_devs_s {
 	{0x00000000, NULL}
 };
 
-#if 0
-static int mpc57xx_get_flash_adr(struct flash_bank *bank, uint32_t reg)
-{
-	struct mpc57xx_flash_bank *mpc57xx_info = bank->driver_priv;
-	return mpc57xx_info->register_base | reg;
-}
-#endif
-
 static int mpc57xx_build_block_list(struct flash_bank *bank)
 {
 	struct mpc57xx_flash_bank *mpc57xx_info = bank->driver_priv;
 
-	int i;
-	int num_blocks;
-
-	num_blocks = 38;
+	unsigned int i;
+	unsigned int num_blocks = 38;
 
 	bank->num_sectors = num_blocks;
 	bank->sectors = malloc(sizeof(struct flash_sector) * num_blocks);
@@ -263,54 +215,7 @@ static int mpc57xx_protect_check(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
-#if 0
-static int mpc57xx_unlock_block(struct flash_bank *bank, uint32_t block_num)
-{
-	struct target *target = bank->target;
-	struct mpc57xx_flash_bank *mpc57xx_info = bank->driver_priv;
-	int retval;
-	uint32_t val;
-	uint32_t reg;
-
-	printf("Unlocking block: %d\n", block_num);
-
-	reg = mpc57xx_flash_lock_regs[mpc57xx_info->lock_sel_reg[block_num]];
-	retval = target_read_u32(target, reg, &val);
-	if (retval != ERROR_OK)
-		return retval;
-	// val = be_to_h_u32((uint8_t *)&val);
-	printf("Original lock = 0x%08x\n", val);
-	val &= ~mpc57xx_info->lock_sel_bit[block_num]; /* Set appropriate bits to zero to unlock */
-	printf("Modified lock = 0x%08x\n", val);
-	retval = target_write_u32(target, reg, val);
-	if (retval != ERROR_OK)
-		return retval;
-	retval = target_read_u32(target, reg, &val);
-	if (retval != ERROR_OK)
-		return retval;
-	printf("New lock = 0x%08x\n", val);
-
-	// retval = target_write_u32(target, mpc57xx_flash_lock_regs[0], 0xFE83FC00);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// retval = target_read_u32(target, mpc57xx_flash_lock_regs[0], &val);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// printf("New lock = 0x%08x\n", val);
-	
-	// retval = target_write_u32(target, mpc57xx_flash_lock_regs[2], 0xFFC00000);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// retval = target_read_u32(target, mpc57xx_flash_lock_regs[2], &val);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// printf("New lock = 0x%08x\n", val);
-
-	return ERROR_OK;
-}
-#endif
-
-static int mpc57xx_unlock_block(struct flash_bank *bank, unsigned int first, unsigned int last)
+static int mpc57xx_protect(struct flash_bank *bank, int set, unsigned int first, unsigned int last)
 {
 	struct target *target = bank->target;
 	struct mpc57xx_flash_bank *mpc57xx_info = bank->driver_priv;
@@ -318,7 +223,15 @@ static int mpc57xx_unlock_block(struct flash_bank *bank, unsigned int first, uns
 	uint32_t val[4];
 	unsigned int i;
 
-	printf("Unlocking blocks: %d - %d\n", first, last);
+	if (target->state != TARGET_HALTED) {
+		LOG_ERROR("Target not halted");
+		return ERROR_TARGET_NOT_HALTED;
+	}
+
+	if (set)
+		printf("Locking blocks: %d - %d\n", first, last);
+	else
+		printf("Unlocking blocks: %d - %d\n", first, last);
 
 	// Read LOCK regs first
 	for (i = 0; i < 4; i++) {
@@ -327,9 +240,17 @@ static int mpc57xx_unlock_block(struct flash_bank *bank, unsigned int first, uns
 			return retval;
 	}
 
-	// Set appropriate bits to zero to unlock
-	for (i = first; i <= last; i++)
-		val[mpc57xx_info->lock_sel_reg[i]] &= ~mpc57xx_info->lock_sel_bit[i];
+	// Set appropriate bits to lock/unlock
+	for (i = first; i <= last; i++) {
+		if (set) {
+			val[mpc57xx_info->lock_sel_reg[i]] |= mpc57xx_info->lock_sel_bit[i];
+			bank->sectors[i].is_protected = 1;
+		}
+		else {
+			val[mpc57xx_info->lock_sel_reg[i]] &= ~mpc57xx_info->lock_sel_bit[i];
+			bank->sectors[i].is_protected = 0;
+		}
+	}
 
 	// Write back LOCK regs
 	for (i = 0; i < 4; i++) {
@@ -340,31 +261,6 @@ static int mpc57xx_unlock_block(struct flash_bank *bank, unsigned int first, uns
 
 	return ERROR_OK;
 }
-
-#if 0
-static int mpc57xx_flash_set_sel(struct flash_bank *bank, uint32_t block_num)
-{
-	struct target *target = bank->target;
-	struct mpc57xx_flash_bank *mpc57xx_info = bank->driver_priv;
-	int retval;
-	uint32_t reg[4];
-
-	/* Set all SEL registers to zero */
-	for (unsigned int i = 0; i < 4; i++) {
-		retval = target_write_u32(target, mpc57xx_flash_sel_regs[i], 0x0);
-		if (retval != ERROR_OK)
-			return retval;
-	}
-
-	/* Set appropriate bits to one */
-	reg = mpc57xx_flash_sel_regs[mpc57xx_info->lock_sel_reg[block_num]];
-	retval = target_write_u32(target, reg, mpc57xx_info->lock_sel_bit[block_num]);
-	if (retval != ERROR_OK)
-		return retval;
-
-	return ERROR_OK;
-}
-#endif
 
 static int mpc57xx_flash_set_sel(struct flash_bank *bank, unsigned int first, unsigned int last)
 {
@@ -405,35 +301,19 @@ static int mpc57xx_erase(struct flash_bank *bank, unsigned int first, unsigned i
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	retval = mpc57xx_unlock_block(bank, first, last);
+	retval = mpc57xx_protect(bank, 0, first, last);
 	if (retval != ERROR_OK)
 		return retval;
 
 	printf("Erasing blocks: %d - %d\n", first, last);
 
-	// retval = target_read_u32(target, MPC57XX_REG_MCR, &val);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// printf("MPC57XX_REG_MCR = 0x%08x\n", val);
-
 	retval = target_write_u32(target, MPC57XX_REG_MCR, 0); /* Clear MCR */
 	if (retval != ERROR_OK)
 		return retval;
 
-	// retval = target_read_u32(target, MPC57XX_REG_MCR + 0x8, &val);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// printf("MPC57XX_REG_MCRE = 0x%08x\n", val);
-
-	// retval = target_read_u32(target, MPC57XX_REG_MCR + 0x54, &val);
-	// if (retval != ERROR_OK)
-	// 	return retval;
-	// printf("MPC57XX_REG_UT0 = 0x%08x\n", val);
-
 	retval = target_read_u32(target, MPC57XX_REG_MCR, &val);
 	if (retval != ERROR_OK)
 		return retval;
-	// val = be_to_h_u32((uint8_t *)&val);
 	printf("MPC57XX_REG_MCR = 0x%08x\n", val);
 
 	retval = target_write_u32(target, MPC57XX_REG_MCR, MPC57XX_REG_MCR_ERS); /* select ERS operation */
@@ -466,7 +346,6 @@ static int mpc57xx_erase(struct flash_bank *bank, unsigned int first, unsigned i
 		retval = target_read_u32(target, MPC57XX_REG_MCR, &val);
 		if (retval != ERROR_OK)
 			return retval;
-		// val = be_to_h_u32((uint8_t *)&val);
 		retry--;
 	}
 	if (retry == 0) {
@@ -486,20 +365,6 @@ static int mpc57xx_erase(struct flash_bank *bank, unsigned int first, unsigned i
 		LOG_ERROR("Received error on flash erase");
 		return ERROR_FAIL;
 	}
-
-	return ERROR_OK;
-}
-
-static int mpc57xx_protect(struct flash_bank *bank, int set, unsigned int first, unsigned int last)
-{
-	struct target *target = bank->target;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
-		return ERROR_TARGET_NOT_HALTED;
-	}
-
-	LOG_ERROR("Protect not implemented yet!!!");
 
 	return ERROR_OK;
 }
@@ -577,7 +442,7 @@ static int mpc57xx_write(struct flash_bank *bank, const uint8_t *buffer, uint32_
 			if (retval != ERROR_OK)
 				return retval;
 
-			retval = mpc57xx_unlock_block(bank, block_num, block_num);
+			retval = mpc57xx_protect(bank, 0, block_num, block_num);
 			if (retval != ERROR_OK)
 				return retval;
 
@@ -680,9 +545,6 @@ static int mpc57xx_auto_probe(struct flash_bank *bank)
 
 static int mpc57xx_info(struct flash_bank *bank, struct command_invocation *cmd)
 {
-	/*struct target *target = bank->target;
-	struct mpc5634_common *mpc5634 = target->arch_info;
-	struct mpc5634_jtag *jtag_info = &mpc5634->jtag;*/
 	uint32_t device_id;
 	int i;
 
@@ -714,52 +576,8 @@ static int mpc57xx_info(struct flash_bank *bank, struct command_invocation *cmd)
 	return ERROR_OK;
 }
 
-#if 0
-COMMAND_HANDLER(mpc57xx_handle_pgm_word_command)
-{
-	uint32_t address, value;
-	int status, res;
-
-	if (CMD_ARGC != 3)
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], address);
-	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], value);
-
-	struct flash_bank *bank;
-	int retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 2, &bank);
-	if (ERROR_OK != retval)
-		return retval;
-
-	if (address < bank->base || address >= (bank->base + bank->size)) {
-		command_print(CMD, "flash address '%s' is out of bounds", CMD_ARGV[0]);
-		return ERROR_OK;
-	}
-
-	res = ERROR_OK;
-	status = mpc57xx_write_word(bank, address, value);
-	if (status & NVMCON_NVMERR)
-		res = ERROR_FLASH_OPERATION_FAILED;
-	if (status & NVMCON_LVDERR)
-		res = ERROR_FLASH_OPERATION_FAILED;
-
-	if (res == ERROR_OK)
-		command_print(CMD, "mpc57xx pgm word complete");
-	else
-		command_print(CMD, "mpc57xx pgm word failed (status = 0x%x)", status);
-
-	return ERROR_OK;
-}
-#endif
-
 COMMAND_HANDLER(mpc57xx_handle_unlock_command)
 {
-	/*uint32_t mchip_cmd;
-	struct target *target = NULL;
-	struct mips_m4k_common *mips_m4k;
-	struct mips_ejtag *ejtag_info;
-	int timeout = 10;*/
-
 	if (CMD_ARGC < 1) {
 		command_print(CMD, "mpc57xx unlock <bank>");
 		return ERROR_COMMAND_SYNTAX_ERROR;
@@ -785,63 +603,11 @@ COMMAND_HANDLER(mpc57xx_handle_unlock_command)
 	uint8_t buf[] = {0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8};
 	mpc57xx_write(bank, buf, 0x005B0000, 8);
 
-printf("Not handled!\n");
-return ERROR_FAIL;
-#if 0
-	not handled yet
-	target = bank->target;
-	mpc5634 = target_to_mpc5634(target);
-	jtag_info = &mpc5634->mpc5634.jtag_info;
-
-	/* we have to use the MTAP to perform a full erase */
-	mips_ejtag_set_instr(ejtag_info, MTAP_SW_MTAP);
-	mips_ejtag_set_instr(ejtag_info, MTAP_COMMAND);
-
-	/* first check status of device */
-	mchip_cmd = MCHP_STATUS;
-	mips_ejtag_drscan_8(ejtag_info, &mchip_cmd);
-	if (mchip_cmd & (1 << 7)) {
-		/* device is not locked */
-		command_print(CMD, "mpc57xx is already unlocked, erasing anyway");
-	}
-
-	/* unlock/erase device */
-	mips_ejtag_drscan_8_out(ejtag_info, MCHP_ASERT_RST);
-	jtag_add_sleep(200);
-
-	mips_ejtag_drscan_8_out(ejtag_info, MCHP_ERASE);
-
-	do {
-		mchip_cmd = MCHP_STATUS;
-		mips_ejtag_drscan_8(ejtag_info, &mchip_cmd);
-		if (timeout-- == 0) {
-			LOG_DEBUG("timeout waiting for unlock: 0x%" PRIx32 "", mchip_cmd);
-			break;
-		}
-		alive_sleep(1);
-	} while ((mchip_cmd & (1 << 2)) || (!(mchip_cmd & (1 << 3))));
-
-	mips_ejtag_drscan_8_out(ejtag_info, MCHP_DE_ASSERT_RST);
-
-	/* select ejtag tap */
-	mips_ejtag_set_instr(ejtag_info, MTAP_SW_ETAP);
-
-	command_print(CMD, "mpc57xx unlocked.\n"
-			"INFO: a reset or power cycle is required "
-			"for the new settings to take effect.");
-
-	return ERROR_OK;
-#endif
+	printf("Not handled!\n");
+	return ERROR_FAIL;
 }
 
 static const struct command_registration mpc57xx_exec_command_handlers[] = {
-/*	{
-		.name = "pgm_word",
-		.usage = "<addr> <value> <bank>",
-		.handler = mpc57xx_handle_pgm_word_command,
-		.mode = COMMAND_EXEC,
-		.help = "program a word",
-	},*/
 	{
 		.name = "unlock",
 		.handler = mpc57xx_handle_unlock_command,
