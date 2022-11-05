@@ -55,7 +55,7 @@ static int mpc57xx_write_gpr(struct mpc5xxx_jtag *jtag_info, int reg,
 	}
 
 	opcode = 0x60000000 | (reg << 16) | (reg << 21); /* ori Rx, Rx, 0 */
-	return mpc57xx_exec_inst(jtag_info, opcode, val, &val2, MPC57XX_EI_VAL);
+	return mpc57xx_exec_inst(jtag_info, opcode, val, &val2, MPC57XX_CPUSCR_CTL_FFRA);
 }
 
 int mpc57xx_read_spr(struct mpc5xxx_jtag *jtag_info, int reg,
@@ -96,7 +96,7 @@ int mpc57xx_write_spr(struct mpc5xxx_jtag *jtag_info, int reg,
 
 	/* Transfer value to special purpose register */
 	opcode = 0x7fe003a6 | ((reg & 0x1f) << 16) | ((reg & 0x3e0) << 6); /* mtspr reg, r31 */
-	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_EI_VAL);
+	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_CPUSCR_CTL_FFRA);
 }
 
 static int mpc57xx_read_cr(struct mpc5xxx_jtag *jtag_info, uint32_t *val)
@@ -123,7 +123,7 @@ static int mpc57xx_write_cr(struct mpc5xxx_jtag *jtag_info, uint32_t val)
 
 	/* Transfer value to condition register */
 	opcode = 0x7feff120; /* mtcr r31 */
-	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_EI_VAL);
+	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_CPUSCR_CTL_FFRA);
 }
 
 static int mpc57xx_read_ctr(struct mpc5xxx_jtag *jtag_info, uint32_t *val)
@@ -150,7 +150,7 @@ static int mpc57xx_write_ctr(struct mpc5xxx_jtag *jtag_info, uint32_t val)
 
 	/* Transfer value to condition register */
 	opcode = 0x7fe903a6; /* mtctr r31 */
-	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_EI_VAL);
+	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_CPUSCR_CTL_FFRA);
 }
 
 static int mpc57xx_read_lr(struct mpc5xxx_jtag *jtag_info, uint32_t *val)
@@ -177,7 +177,7 @@ static int mpc57xx_write_lr(struct mpc5xxx_jtag *jtag_info, uint32_t val)
 
 	/* Transfer value to condition register */
 	opcode = 0x7fe803a6; /* mtlr r31 */
-	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_EI_VAL);
+	return mpc57xx_exec_inst(jtag_info, opcode, val, &val, MPC57XX_CPUSCR_CTL_FFRA);
 }
 
 int mpc57xx_read_reg(struct mpc5xxx_jtag *jtag_info, int reg,
@@ -217,6 +217,8 @@ int mpc57xx_read_reg(struct mpc5xxx_jtag *jtag_info, int reg,
 		*val = 0;
 		retval = ERROR_OK;
 	}
+
+	// printf("mpc57xx_read_reg @ %d: %08x\n", reg, *val);
 
 	return retval;
 }
@@ -265,7 +267,7 @@ int mpc57xx_write_reg(struct mpc5xxx_jtag *jtag_info, int reg,
 	return retval;
 }
 
-int mpc57xx_jtag_read_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs, uint32_t * saved_ctl)
+int mpc57xx_jtag_read_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs, struct mpc5xxx_cpuscr *saved_cpuscr)
 {
 	int i, retval;
 
@@ -276,17 +278,29 @@ int mpc57xx_jtag_read_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs, uint3
 	retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
 	if (retval)
 			return retval;
+	
+	// printf("mpc57xx_jtag_read_regs PC = 0x%08x IR = 0x%08x\n", scr.pc, scr.ir);
 
 	regs[MPC5XXX_REG_PC]  = scr.pc ;
 	regs[MPC5XXX_REG_MSR] = scr.msr ;
-	if (saved_ctl)
-		*saved_ctl = scr.ctl ;
+	if (saved_cpuscr) {
+		saved_cpuscr->wbbrl = scr.wbbrl;
+		saved_cpuscr->wbbrh = scr.wbbrh;
+		saved_cpuscr->msr = scr.msr;
+		saved_cpuscr->pc = scr.pc;
+		saved_cpuscr->ir = scr.ir;
+		saved_cpuscr->ctl = scr.ctl;
+	}
 
 
 	/* turn off interrupts and lie about it in regs[msr] */
 
 	scr.msr &= ~MPC5XXX_MSR_EE ;
 	mpc5xxx_once_cpuscr_write(jtag_info, &scr) ;
+
+	// retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
+	// if (retval)
+	// 		return retval;
 
 	for (i = 0; i < MPC5XXX_NUMCOREREGS - 1; i++) {
 		if (!(i == MPC5XXX_REG_PC || i == MPC5XXX_REG_MSR)) {
@@ -297,6 +311,12 @@ int mpc57xx_jtag_read_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs, uint3
 				keep_alive();
 		}
 	}
+
+	// retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
+	// if (retval)
+	// 		return retval;
+	
+	// printf("mpc57xx_jtag_read_regs PC = 0x%08x IR = 0x%08x\n", scr.pc, scr.ir);
 
 	return ERROR_OK;
 }

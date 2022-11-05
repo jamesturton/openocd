@@ -119,8 +119,7 @@ struct mpc5xxx_common {
 	struct mpc5xxx_comparator *inst_break_list;
 	struct mpc5xxx_comparator *data_break_list;
 	int jtag_state;
-	uint32_t saved_ctl ;
-	uint32_t saved_msr ;
+	struct mpc5xxx_cpuscr saved_cpuscr;
 	uint32_t ctl_on_entry ;
 	uint32_t msr_on_entry ;
 };

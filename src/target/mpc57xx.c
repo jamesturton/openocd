@@ -1,5 +1,6 @@
 /***************************************************************************
- *   Copyright (C) 2017 by James Murray <james@nscc.info                   *
+ *   Copyright (C) 2022 by James Turton <james.turton@gmx.com>             *
+ *   Copyright (C) 2017 by James Murray <james@nscc.info>                  *
  *   Based on code:                                                        *
  *       Copyright (C) 2010 by Oleksandr Tymoshenko <gonzo@bluezbox.com>   *
  *   Based on mips_m4k code:                                               *
@@ -32,8 +33,6 @@
 #include "target_type.h"
 #include "mpc5xxx_jtag.h"
 #include "mpc5xxx.h"
-#include "mpc56xx_regs.h"
-#include "mpc56xx.h"
 #include "mpc57xx_jtag.h"
 #include "mpc57xx_regs.h"
 #include "mpc57xx.h"
@@ -101,8 +100,8 @@ static int mpc57xx_debug_entry(struct target *target, int async_flag)
 	mpc57xx_save_context(target);
 	/* Force to say we are halted. Debug/halt appear to be synonymous? */
 	target->state = TARGET_HALTED;
-	mpc57xx->ctl_on_entry = mpc57xx->saved_ctl ;
-	mpc57xx->msr_on_entry = mpc57xx->saved_msr ;
+	mpc57xx->ctl_on_entry = mpc57xx->saved_cpuscr.ctl ;
+	mpc57xx->msr_on_entry = mpc57xx->saved_cpuscr.msr ;
 
 	printf("MSR on entry is 0x%08x\n", mpc57xx->msr_on_entry);
 	printf("CTL on entry is 0x%08x\n", mpc57xx->ctl_on_entry);
@@ -135,8 +134,6 @@ static int mpc57xx_debug_entry(struct target *target, int async_flag)
 	retval = mpc5xxx_once_write(&mpc57xx->jtag, MPC57XX_ONCE_DBSR, 0xffffffff, 32);
 	if (retval)
 		return retval;
-
-
 
 	/* make sure break unit configured */
 	mpc57xx_configure_break_unit(target);
@@ -210,7 +207,6 @@ static int mpc57xx_poll(struct target *target)
 	return ERROR_OK;
 }
 
-#define MPC57XX_BOOTADDR 0xf9c000
 /* Read the boot address from flash
  * Simplified version that only reads from 0 address.
  * Ought to read from the multiple possible addresses.
@@ -218,76 +214,96 @@ static int mpc57xx_poll(struct target *target)
 static int mpc57xx_read_boot_vector(struct target *target, uint32_t *addr)
 {
 	int retval;
+	int i;
 	uint32_t ad;
 
 	*addr = 0;
 
-	retval = target_read_memory(target, MPC57XX_BOOTADDR, 4, 1, (uint8_t *)&ad);
-	if (retval != ERROR_OK)
-		return retval;
-	if (ad != 0x5a00) { /* 0x005a0000 BE */
-		printf("Didn't find a boot record at *0x%08x, found 0x%08x\n", MPC57XX_BOOTADDR, ad);
+	target_addr_t bootaddr[11] = {
+		0x00F8C000,
+		0x00FC0000,
+		0x00FD8000,
+		0x00FE0000,
+		0x00F90000,
+		0x00F94000,
+		0x00F98000,
+		0x00F9C000,
+		0x00FA0000,
+		0x00FA4000,
+		0x00FA8000
+	};
+
+	printf("Read PC from boot vector\n");
+
+	for (i = 0; i < 11; i++) {
+		retval = target_read_u16(target, bootaddr[i], (uint16_t *)&ad);
+		if (retval != ERROR_OK)
+			return retval;
+		if (ad == 0x5a)
+			break;
+		// printf("Didn't find a boot record at *0x%08x, found 0x%08x\n", (uint32_t)bootaddr[i], ad);
+	}
+
+	if (i == 11) {
+		printf("Didn't find any boot record!\n");
 		/*return ERROR_FAIL;*/
-		*addr = MPC57XX_BOOTADDR; /* At least it is readable flash */
+		*addr = bootaddr[1]; /* At least it is readable flash */
 		return ERROR_OK;
 	}
-	printf("Check *0x%08x = 0x%08x\n", MPC57XX_BOOTADDR, ad);
 
-	retval = target_read_memory(target, MPC57XX_BOOTADDR + 4, 4, 1, (uint8_t *)&ad);
+	// Look for CPU0 reset vector at 0x10 offset. TODO: Get actual CPU from SMP
+
+	retval = target_read_u32(target, bootaddr[i] + 0x10, addr);
 	if (retval != ERROR_OK)
 		return retval;
-	*addr = ((ad & 0x000000ff) << 24)
-				| ((ad & 0x0000ff00) << 8)
-				| ((ad & 0x00ff0000) >> 8)
-				| ((ad & 0xff000000) >> 24);
-	printf("Check *0x%08x = 0x%08x\n", MPC57XX_BOOTADDR + 4, *addr);
+
+	printf("Check *0x%08x = 0x%08x\n", (uint32_t)bootaddr[i] + 0x10, *addr);
+
+	printf("Boot PC = 0x%08x\n", *addr);
 
 	return ERROR_OK;
 }
 
-
+#if 0
 /* Initialise flash wait states. From AN4670 */
 static int mpc57xx_init_flash_ws(struct target *target)
 {
 	int retval;
 	uint32_t val;
 
-	printf("init_flash_ws ");
+	printf("Initialise Flash wait states");
 	val = 0x00004554;
-	retval = mpc5xxx_write_memory(target, MPC57XX_FLASH_PFCR1,
-		4, 1, (uint8_t *)&val);
+	retval = target_write_u32(target, MPC57XX_FLASH_PFCR1, val);
 	if (retval)
 		return retval;
 
 	val = 0x00000054;
-	retval = mpc5xxx_write_memory(target, MPC57XX_FLASH_PFCR2,
-		4, 1, (uint8_t *)&val);
+	retval = target_write_u32(target, MPC57XX_FLASH_PFCR2, val);
 	if (retval)
 		return retval;
 
 	val = 0x00004555;
-	retval = mpc5xxx_write_memory(target, MPC57XX_FLASH_PFCR1,
-		4, 1, (uint8_t *)&val);
+	retval = target_write_u32(target, MPC57XX_FLASH_PFCR1, val);
 	if (retval)
 		return retval;
 
 	val = 0x00000055;
-	retval = mpc5xxx_write_memory(target, MPC57XX_FLASH_PFCR2,
-		4, 1, (uint8_t *)&val);
+	retval = target_write_u32(target, MPC57XX_FLASH_PFCR2, val);
 	if (retval)
 		return retval;
 
-	printf("done.\n");
+	printf(" - done!\n");
 	return ERROR_OK;
 }
 
-#if 0
 /* Initialise Branch Target Buffer. From AN4670 */
 static int mpc57xx_init_btb(struct target *target)
 {
+	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
 	int retval;
 	uint32_t val, opcode;
 
+	printf("Initialise branch target buffer");
 	/* This is the code we need to run.
 	 *	70 60 02 01		e_li	r3,513
 	 *	7c 75 fb a6		mtspr	1013,r3
@@ -295,27 +311,114 @@ static int mpc57xx_init_btb(struct target *target)
 	 */
 	opcode = 0x70600201;
 	retval = mpc57xx_exec_inst(&mpc57xx->jtag, opcode, 0, &val,
-		(mpc57xx->saved_ctl & 0xFFFF0000) | MPC57XX_EI_INC);
+		(mpc57xx->saved_cpuscr.ctl & 0xFFC00000) | MPC57XX_CPUSCR_CTL_FFRA);
 	if (retval)
 		return retval;
 
 	opcode = 0x7c75fba6;
 	retval = mpc57xx_exec_inst(&mpc57xx->jtag, opcode, 0, &val,
-		(mpc57xx->saved_ctl & 0xFFFF0000) | MPC57XX_EI_INC);
+		(mpc57xx->saved_cpuscr.ctl & 0xFFC00000) | MPC57XX_CPUSCR_CTL_FFRA);
 	if (retval)
 		return retval;
 
 	opcode = 0x0001; /* how to specify 16bit instruction */
 	retval = mpc57xx_exec_inst(&mpc57xx->jtag, opcode, 0, &val,
-		(mpc57xx->saved_ctl & 0xFFFF0000) | MPC57XX_EI_INC);
+		(mpc57xx->saved_cpuscr.ctl & 0xFFC00000) | MPC57XX_CPUSCR_CTL_FFRA);
 	if (retval)
 		return retval;
 
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 626, 0xfff0000a); /* MAS2 */
+	if (retval)
+		return retval;
+
+	printf(" - done!\n");
 	return ERROR_OK;
 }
-#endif
 
-#if 0
+static int mpc57xx_init_core_regs(struct target *target)
+{
+	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
+	int retval;
+	uint32_t reg;
+
+	printf("Intialise core registers");
+
+	for (reg = 0; reg <= 31; reg++) {
+		retval = mpc57xx_write_reg(&mpc57xx->jtag, reg, 0);
+		if (retval)
+			return retval;
+	}
+
+	// mtspr   1, r1       ;#XER
+	// mtcrf   0xFF, r1
+	// mtspr   CTR, r1
+	// mtspr   272, r1     ;#SPRG0
+	// mtspr   273, r1     ;#SPRG1
+	// mtspr   274, r1     ;#SPRG2
+	// mtspr   275, r1     ;#SPRG3
+	// mtspr   58, r1      ;#CSRR0
+	// mtspr   59, r1      ;#CSRR1
+	// mtspr   570, r1     ;#MCSRR0
+	// mtspr   571, r1     ;#MCSRR1
+	// mtspr   61, r1      ;#DEAR
+	// mtspr   63, r1      ;#IVPR
+	// mtspr   256, r1     ;#USPRG0
+	// mtspr   62, r1      ;#ESR
+	// mtspr   8,r31       ;#LR
+
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 1, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_reg(&mpc57xx->jtag, MPC5XXX_REG_CND, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_reg(&mpc57xx->jtag, MPC5XXX_REG_CNT, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 272, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 273, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 274, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 275, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 58, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 59, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 570, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 571, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 61, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 63, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 256, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 62, 0);
+	if (retval)
+		return retval;
+	retval = mpc57xx_write_spr(&mpc57xx->jtag, 8, 0);
+	if (retval)
+		return retval;
+
+	printf(" - done!\n");
+	return ERROR_OK;
+}
+
 /* Supposed to performs 64bit writes to whole of SRAM to setup ECC
  * Takes a very long time over JTAG, so instead setup just the first 256 bytes.
  */
@@ -324,25 +427,24 @@ static int mpc57xx_init_sram(struct target *target)
 	int retval;
 	uint32_t val, addr;
 
-	printf("init_sram");
+	printf("Initialise SRAM in C-code");
 	val = 0;
 	for (addr = 0; addr < 256 ; addr += 4) {
-		retval = mpc5xxx_write_memory(target, MPC57XX_START_OF_SRAM + addr,
-			4, 1, (uint8_t *)&val);
+		retval = target_write_u32(target, MPC57XX_START_OF_SRAM + addr, val);
 		if (retval)
 			return retval;
 	}
 
-	printf("done.\n");
+	printf(" - done!\n");
 	return ERROR_OK;
 }
-#endif
 
 static int mpc57xx_init_pll(struct target *target)
 {
 	int retval;
 	uint32_t val, retry;
 
+	printf("Initialise PLL in C-code");
 	retval = target_write_u32(target, MPC57XX_FMPLL_ESYNCR2, 0x00000002);
 	if (retval != ERROR_OK)
 		return retval;
@@ -355,9 +457,7 @@ static int mpc57xx_init_pll(struct target *target)
 	retry = 100; /* arbitrary limit */
 	val = 0;
 	while (retry && ((val & 8) == 0)) {
-		retval = target_read_memory(target, MPC57XX_FMPLL_SYNSR, 4, 1,
-				(uint8_t *)&val);
-		val = be_to_h_u32((uint8_t *)&val); /* swap ends again */
+		retval = target_read_u32(target, MPC57XX_FMPLL_SYNSR, &val);
 		if (retval != ERROR_OK)
 			return retval;
 		retry--;
@@ -372,6 +472,7 @@ static int mpc57xx_init_pll(struct target *target)
 	if (retval != ERROR_OK)
 		return retval;
 
+	printf(" - done!\n");
 	return ERROR_OK;
 }
 
@@ -380,6 +481,8 @@ static int mpc57xx_init_vectors(struct target *target)
 	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
 	int retval;
 	uint32_t vec;
+
+	printf("Intialise interrupt vectors");
 /* From Freescale init
  *	spr 63t $40000000
  *	spr 400t $0
@@ -409,8 +512,10 @@ static int mpc57xx_init_vectors(struct target *target)
 			return retval;
 		}
 
+	printf(" - done!\n");
 	return ERROR_OK;
 }
+#endif
 
 static int mpc57xx_halt(struct target *target)
 {
@@ -483,7 +588,6 @@ static int mpc57xx_deassert_reset(struct target *target)
 		retval = mpc57xx_read_boot_vector(target, &pc);
 		if (retval)
 			return retval;
-		printf("Boot PC = 0x%08x\n", pc);
 
 		buf_set_u32(mpc57xx->core_cache->reg_list[MPC5XXX_REG_PC].value, 0, 32, pc);
 		mpc57xx->core_cache->reg_list[MPC5XXX_REG_PC].dirty = 1;
@@ -492,41 +596,32 @@ static int mpc57xx_deassert_reset(struct target *target)
 		if (retval)
 			return retval;
 
-		printf("Initialise Flash wait states\n");
+#if 0
 		retval = mpc57xx_init_flash_ws(target);
 		if (retval)
 			return retval;
 
-		/* Got as far as here, then found that S32 Design Studio includes a working OSBDM driver
-		 * STOP...
-		 */
-
-
-		printf("STOP!!! NOT READY YET...\n");
-		exit(1);
-
-#if 0
-		/* Initialise MMU */
-		printf("Initialise MMU in C-code\n");
-		retval = mpc57xx_init_mmu(target);
+		retval = mpc57xx_init_btb(target);
 		if (retval)
 			return retval;
 
-		printf("Initialise SRAM in C-code\n");
+		retval = mpc57xx_init_core_regs(target);
+		if (retval)
+			return retval;
+
 		retval = mpc57xx_init_sram(target);
+		if (retval)
+			return retval;
+
+		retval = mpc57xx_init_pll(target);
+		if (retval)
+			return retval;
+
+		retval = mpc57xx_init_vectors(target);
 		if (retval)
 			return retval;
 #endif
 
-
-		printf("Initialise PLL in C-code\n");
-		retval = mpc57xx_init_pll(target);
-		if (retval)
-			return retval;
-		printf("Intialise interrupt vectors\n");
-		retval = mpc57xx_init_vectors(target);
-		if (retval)
-			return retval;
 		retval = mpc57xx_debug_entry(target, 1);
 		if (retval != ERROR_OK)
 			return retval;
@@ -736,6 +831,7 @@ static int mpc57xx_remove_breakpoint(struct target *target,
 static int mpc57xx_step(struct target *target, int current,
 	target_addr_t address, int handle_breakpoints)
 {
+	printf("mpc57xx_step\n");
 	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
 	struct breakpoint *breakpoint = NULL;
 	int retval;
@@ -764,18 +860,15 @@ static int mpc57xx_step(struct target *target, int current,
 	addr = buf_get_u32(mpc57xx->core_cache->reg_list[MPC5XXX_REG_PC].value, 0, 32);
 
 	/* Fetch the instruction from that address */
-	mpc5xxx_jtag_read_memory32(&mpc57xx->jtag,
-		addr, 1, &val);
-
-	/* Opcode comes back endian swapped, fix it. */
-	opcode = ((val & 0x000000ff) << 24)
-			| ((val & 0x0000ff00) << 8)
-			| ((val & 0x00ff0000) >> 8)
-			| ((val & 0xff000000) >> 24);
+	/* VLE so might be mis aligned - read in 2 half words */
+	retval = target_read_memory(target, addr, sizeof(uint16_t), 2, (uint8_t *)&opcode);
+	if (retval)
+		return retval;
+	opcode = target_buffer_get_u32(target, (uint8_t *)&opcode);
+	printf("mpc57xx_step address 0x%08x, opcode 0x%08x\n", addr, opcode);
 
 	/* restore context incl. setting PC*/
 	mpc57xx_restore_context(target);
-
 
 	/* disable interrupts while stepping */
 	/*mpc57xx_enable_interrupts(target, 0);*/
@@ -784,8 +877,16 @@ static int mpc57xx_step(struct target *target, int current,
 	target_call_event_callbacks(target, TARGET_EVENT_RESUMED);
 	keep_alive();
 
-	retval = mpc57xx_exec_inst(&mpc57xx->jtag, opcode, 0, &val,
-			(mpc57xx->saved_ctl & 0xFFFF0000) | MPC57XX_EI_INC);
+	if (current)
+	{
+		printf("mpc57xx_step go_noexit\n");
+		retval = mpc57xx_exec_go_noexit(&mpc57xx->jtag);
+	}
+	else
+	{
+		printf("mpc57xx_step exec_inst\n");
+		retval = mpc57xx_exec_inst(&mpc57xx->jtag, opcode, 0, &val, 0);
+	}
 
 	if (retval)
 		return retval;
@@ -935,6 +1036,7 @@ static int mpc57xx_remove_watchpoint(struct target *target,
 static int mpc57xx_resume(struct target *target, int current,
 	target_addr_t address, int handle_breakpoints, int debug_execution)
 {
+	printf("mpc57xx_resume\n");
 	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
 	struct breakpoint *breakpoint = NULL;
 	uint32_t resume_pc;
@@ -1034,7 +1136,7 @@ static int mpc57xx_target_create(struct target *target, Jim_Interp *interp)
 	mpc57xx->common_magic = MPC57XX_COMMON_MAGIC;
 	target->arch_info = mpc57xx;
 
-	mpc57xx->jtag.once = MPC57XX_TAP_ONCE1; /* Default to CPU1 */
+	mpc57xx->jtag.once = MPC57XX_TAP_ONCE0; /* Default to CPU0 */
 	mpc57xx->jtag.current_tap = MPC5XXX_TAP_INVALID; /* Invalid to force TAP selection */
 	mpc57xx->jtag.jtag_irlen = 6;
 
@@ -1047,25 +1149,23 @@ static int mpc57xx_target_create(struct target *target, Jim_Interp *interp)
 int mpc57xx_save_context(struct target *target)
 {
 	int retval, i;
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
 
 	/*printf("save_context\n");*/
 	keep_alive();
-	retval = mpc57xx_jtag_read_regs(&mpc56xx->jtag, mpc56xx->core_regs, &mpc56xx->saved_ctl);
+	retval = mpc57xx_jtag_read_regs(&mpc57xx->jtag, mpc57xx->core_regs, &mpc57xx->saved_cpuscr);
 	if (retval != ERROR_OK)
 		return retval;
-
-	mpc56xx->saved_msr = mpc56xx->core_regs[MPC5XXX_REG_MSR] ;
 
 	/* now we saved the sate of the msr before we disabled interrupts,
 	 * we can stop lying about disabled interrupts - otherwise
 	 * restore_context will re-enable them
 	 */
 
-	mpc56xx->core_regs[MPC5XXX_REG_MSR] &= ~MPC5XXX_MSR_EE ;
+	mpc57xx->core_regs[MPC5XXX_REG_MSR] &= ~MPC5XXX_MSR_EE ;
 
 	for (i = 0; i < MPC5XXX_NUMCOREREGS; i++) {
-		if (!mpc56xx->core_cache->reg_list[i].valid)
+		if (!mpc57xx->core_cache->reg_list[i].valid)
 			mpc5xxx_read_core_reg(target, i);
 	}
 
@@ -1085,22 +1185,28 @@ int mpc57xx_restore_context(struct target *target)
 	/*printf("restore_context\n");*/
 
 	/* get pointers to arch-specific information */
-	struct mpc5xxx_common *mpc56xx = target_to_mpc5xxx(target);
+	struct mpc5xxx_common *mpc57xx = target_to_mpc5xxx(target);
 
 	for (i = 0; i < MPC5XXX_NUMCOREREGS; i++) {
-		if (mpc56xx->core_cache->reg_list[i].dirty)
+		if (mpc57xx->core_cache->reg_list[i].dirty)
 			mpc5xxx_write_core_reg(target, i);
 	}
 
 	/* write core regs */
-	mpc57xx_jtag_write_regs(&mpc56xx->jtag, mpc56xx->core_regs);
+	mpc57xx_jtag_write_regs(&mpc57xx->jtag, mpc57xx->core_regs);
 
 	/* Restore CTL */
-	retval = mpc5xxx_once_cpuscr_read(&mpc56xx->jtag, &scr);
+	retval = mpc5xxx_once_cpuscr_read(&mpc57xx->jtag, &scr);
 	if (retval)
 		return retval;
-	scr.ctl = mpc56xx->saved_ctl;
-	return mpc5xxx_once_cpuscr_write(&mpc56xx->jtag, &scr);
+	scr.wbbrl = mpc57xx->saved_cpuscr.wbbrl;
+	scr.wbbrh = mpc57xx->saved_cpuscr.wbbrh;
+	scr.msr = mpc57xx->saved_cpuscr.msr;
+	scr.pc = mpc57xx->saved_cpuscr.pc;
+	scr.ir = mpc57xx->saved_cpuscr.ir;
+	scr.ctl = mpc57xx->saved_cpuscr.ctl;
+	printf("mpc57xx_restore_context PC = 0x%08x IR = 0x%08x\n", scr.pc, scr.ir);
+	return mpc5xxx_once_cpuscr_write(&mpc57xx->jtag, &scr);
 }
 
 

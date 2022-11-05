@@ -20,9 +20,7 @@
 #ifndef MPC57XX_REGS
 #define MPC57XX_REGS
 
-#include "mpc56xx_regs.h"
-
-int mpc57xx_jtag_read_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs, uint32_t *saved_ctl);
+int mpc57xx_jtag_read_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs, struct mpc5xxx_cpuscr *saved_cpuscr);
 int mpc57xx_jtag_write_regs(struct mpc5xxx_jtag *jtag_info, uint32_t *regs);
 int mpc57xx_read_reg(struct mpc5xxx_jtag *jtag_info, int reg, uint32_t *val);
 int mpc57xx_write_reg(struct mpc5xxx_jtag *jtag_info, int reg, uint32_t val);

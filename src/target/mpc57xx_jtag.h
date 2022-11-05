@@ -116,15 +116,12 @@
 #define MPC57XX_NUM_BPS	8
 #define MPC57XX_NUM_WPS	2 /* actually 4, but 3,4 not yet implemented */
 
-#define MPC57XX_EI_VAL		0x01 /* ? */
-#define MPC57XX_EI_INC		0x02 /* ? */
-#define MPC57XX_EI_MASKINT	0x04 /* ? */
-
 int mpc57xx_enter_debug(struct mpc5xxx_jtag *jtag_info, int async_flag);
 int mpc57xx_leave_debug(struct mpc5xxx_jtag *jtag_info);
 int mpc57xx_enable_once(struct mpc5xxx_jtag *jtag_info);
 int mpc57xx_exec_inst(struct mpc5xxx_jtag *jtag_info, uint32_t inst, uint32_t in,
 		uint32_t *out, uint32_t flag);
+int mpc57xx_exec_go_noexit(struct mpc5xxx_jtag *jtag_info);
 int mpc57xx_exit_debug(struct mpc5xxx_jtag *jtag_info, uint32_t addr, int sw_bp, uint32_t ctl_on_entry);
 int mpc57xx_jtag_set_bp(struct mpc5xxx_jtag *jtag_info, int bp_num, uint32_t addr);
 int mpc57xx_jtag_clr_bps_wps(struct mpc5xxx_jtag *jtag_info);

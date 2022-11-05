@@ -31,29 +31,45 @@
 int mpc57xx_enter_debug(struct mpc5xxx_jtag *jtag_info, int async_flag)
 {
 	int res;
+	uint32_t val, retry;
 	printf("got call to enter_debug\n");
 
 	res = mpc57xx_enable_once(jtag_info);
 	if (res)
 		return res;
 
-	if (async_flag) {
-		/* WKUP, DR */
-		res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DR | MPC5XXX_OCR_WKUP, 32);
+	res = mpc5xxx_once_osr_read(jtag_info, &val);
+	if (res)
+		return res;
+
+	if (async_flag)
+		val = MPC5XXX_OCR_DR | MPC5XXX_OCR_WKUP;
+	else
+		val = MPC5XXX_OCR_DR | MPC5XXX_OCR_FDB | MPC5XXX_OCR_WKUP;
+
+	res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, val, 32);
+	if (res)
+		return res;
+
+	retry = 100; /* arbitrary limit */
+	val = 0;
+	while (!((val & MPC5XXX_OSR_DEBUG) && (val & MPC5XXX_OSR_MCLK))) {
+		res = mpc5xxx_once_osr_read(jtag_info, &val);
 		if (res)
 			return res;
+		retry--;
+	}
+	if (retry == 0) {
+		printf("Failed to put CPU in debug state.\n");
+		return ERROR_FAIL;
 	}
 
-	/* was WKUP, FDB only */
-	res = mpc5xxx_once_write(jtag_info, MPC5XXX_ONCE_OCR, MPC5XXX_OCR_DR | MPC5XXX_OCR_FDB | MPC5XXX_OCR_WKUP | 1, 32);
-	if (res)
-		return res;
-
-	/* Clear internal debug status register */
-	res = mpc5xxx_once_write(jtag_info, MPC57XX_ONCE_EDBSR0, 0xffffffff, 32);
-	if (res)
-		return res;
+	/* Enable external debug mode */
 	res = mpc5xxx_once_write(jtag_info, MPC57XX_ONCE_DBCR0, MPC5XXX_ONCE_DBCR0_EDM, 32);
+	if (res)
+		return res;
+	/* Clear internal debug status register */
+	res = mpc5xxx_once_write(jtag_info, MPC57XX_ONCE_DBSR, 0xffffffff, 32);
 	if (res)
 		return res;
 	/* Clear external debug status register */
@@ -105,11 +121,22 @@ int mpc57xx_exec_inst_nowait(struct mpc5xxx_jtag *jtag_info, uint32_t inst, uint
 
 	uint32_t osr;
 	struct mpc5xxx_cpuscr scr;
-	uint32_t val;
+	// uint32_t val;
+
+	// printf("mpc57xx_exec_inst_nowait inst =0x%08x\n", inst);
 
 	retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
 	if (retval != ERROR_OK)
 		return retval;
+	// printf("mpc57xx_exec_inst_nowait before inst =0x%08x, PC=0x%08x\n", scr.ir, scr.pc);
+	// printf("mpc57xx_exec_inst_nowait before ctl =0x%08x\n", scr.ctl);
+
+	// uint32_t pc_before = scr.pc;
+
+	// retval = mpc5xxx_once_osr_read(jtag_info, &osr);
+	// if (retval)
+	// 	return retval;
+	// printf("OSR = 0x%08x\n", osr);
 
 	/*
 	 * write the appropriate information into the CPU scan chain
@@ -121,26 +148,91 @@ int mpc57xx_exec_inst_nowait(struct mpc5xxx_jtag *jtag_info, uint32_t inst, uint
 	/* leave scr.msr unchanged */
 	scr.ir = inst;
 
+	/* May point to invalid instruction? */
+	// uint32_t offset = (scr.ctl & MPC5XXX_CPUSCR_CTL_PCOFST_MASK) >> MPC5XXX_CPUSCR_CTL_PCOFST_OFFSET;
+	// printf("MPC5XXX_CPUSCR_CTL_PCOFST = 0x%08x\n", offset);
+	// if (offset < 6)
+	// 	scr.pc -= 4 * offset; /* post-decrement by one instruction */
+	// if ((flag & MPC57XX_CPUSCR_CTL_FFRA) == 0)
+	// 	scr.pc -= 4;
+
 	/*
 	 * FILTHY HACK:
 	 * If we a are single stepping as part of normal execution flow, we need to ensure the
 	 * top sixteen bits of ctl are the same as when we entered debug mode.
 	 * If this is the case, the upper sixteen bits of flag should contain this ...
 	 */
-
-	scr.ctl = flag & 0xFFFF0000 ;
-
-
-	if ((flag & MPC57XX_EI_VAL))
-		scr.ctl |= MPC57XX_CPUSCR_CTL_FFRA;
-
-	/* May point to invalid instruction? */
-	if ((flag & MPC57XX_EI_INC) == 0)
-		scr.pc -= 4; /* post-decrement by one instruction */
+	
+	scr.ctl = flag & (0xFFC00000 | MPC5XXX_CPUSCR_CTL_FFRA) ;
 
 	retval = mpc5xxx_once_cpuscr_write(jtag_info, &scr);
 	if (retval != ERROR_OK)
 		return retval;
+
+	retval = mpc5xxx_jtag_set_instr(jtag_info, MPC5XXX_ONCE_GO | MPC57XX_ONCE_NOREG); /* was MPC57XX_ONCE_CPUSCR */
+	if (retval)
+		return retval;
+
+	/* Freescale e200z3 RM has this CRITICAL tidbit:
+	 * "In addition, the Update-DR state must also be transitioned through
+	 * in order for the single-step and/or exit functionality to be performed"
+	 */
+	// retval = mpc5xxx_jtag_read_data(jtag_info, &val, 1); /* dummy read of one bit to force update-DR */
+	// if (retval)
+	// 	return retval;
+
+	/* After single-step, "the external tool
+	 * should read the OnCE Status Register (OSR) to verify that the CPU has returned to debug mode with no
+	 * error by verifying that the OSR[DEBUG] bit is set and OSR[ERR] bit is cleared."
+	 */
+
+	retval = mpc5xxx_once_osr_read(jtag_info, &osr);
+	if (retval != ERROR_OK)
+		return retval;
+
+	if (((osr & MPC5XXX_OSR_DEBUG) == 0) || (osr & MPC5XXX_OSR_ERR)) {
+		printf("2. OSR indicates failure of some kind. OSR = 0x%08x\n", osr);
+		printf("The inst =0x%08x, PC=0x%08x\n", inst, scr.pc);
+
+		if ((osr & MPC5XXX_OSR_ERR))
+			return ERROR_WAIT ;
+		else
+			return ERROR_FAIL;
+	}
+
+	retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
+	if (retval != ERROR_OK)
+		return retval;
+	// printf("mpc57xx_exec_inst_nowait after inst =0x%08x, PC=0x%08x\n", scr.ir, scr.pc);
+	// printf("mpc57xx_exec_inst_nowait diff in pc =0x%08x, flag =0x%08x\n", scr.pc - pc_before, flag);
+	// printf("mpc57xx_exec_inst_nowait after ctl =0x%08x\n", scr.ctl);
+
+	*out = scr.wbbrl;
+
+	// *out = 0;
+
+	return ERROR_OK;
+}
+
+/* In debug mode only, loads an instruction to CPUSCR and executes
+ * it. Optionally using alternate data if flag set.
+ */
+int mpc57xx_exec_go_noexit(struct mpc5xxx_jtag *jtag_info)
+{
+	int retval;
+
+	uint32_t osr;
+	// struct mpc5xxx_cpuscr scr;
+	uint32_t val;
+
+	// for (int i = 0; i<5; i++)
+	// {
+	// retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
+	// if (retval != ERROR_OK)
+	// 	return retval;
+	
+	// printf("exec_go_noexit PC = 0x%08x IR = 0x%08x\n", scr.pc, scr.ir);
+	// }
 
 	retval = mpc5xxx_jtag_set_instr(jtag_info, MPC5XXX_ONCE_GO | MPC57XX_ONCE_NOREG); /* was MPC57XX_ONCE_CPUSCR */
 	if (retval)
@@ -165,7 +257,6 @@ int mpc57xx_exec_inst_nowait(struct mpc5xxx_jtag *jtag_info, uint32_t inst, uint
 
 	if (((osr & MPC5XXX_OSR_DEBUG) == 0) || (osr & MPC5XXX_OSR_ERR)) {
 		printf("2. OSR indicates failure of some kind. OSR = 0x%08x\n", osr);
-		printf("The inst =0x%08x, PC=0x%08x\n", inst, scr.pc);
 
 		if ((osr & MPC5XXX_OSR_ERR))
 			return ERROR_WAIT ;
@@ -173,28 +264,22 @@ int mpc57xx_exec_inst_nowait(struct mpc5xxx_jtag *jtag_info, uint32_t inst, uint
 			return ERROR_FAIL;
 	}
 
-	retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
-	if (retval != ERROR_OK)
-		return retval;
-
-	*out = scr.wbbrl;
-
 	return ERROR_OK;
 }
 
 int mpc57xx_exec_inst(struct mpc5xxx_jtag *jtag_info, uint32_t inst, uint32_t in,
 		uint32_t *out, uint32_t flag){
 	int retval ;
-	int retries = 100 ;
+	// int retries = 100 ;
 
-	do {
+	// do {
 		retval = mpc57xx_exec_inst_nowait(jtag_info, inst, in, out, flag);
-	} while (retval == ERROR_WAIT && --retries) ;
+	// } while (retval == ERROR_WAIT && --retries) ;
 
 	if (retval) {
-		if (!retries)
+		// if (!retries)
 			printf("Failed to execute single step.\n");
-		return retval;
+		// return retval;
 	}
 	return retval ;
 }
@@ -219,31 +304,29 @@ int mpc57xx_exit_debug(struct mpc5xxx_jtag *jtag_info, uint32_t addr, int sw_bp,
 	if (retval != ERROR_OK)
 		return retval;
 
-	/* debug */
-		/* see what's in IACs */
-		retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC1, &val, 32);
-		if (retval != ERROR_OK)
-			return retval;
-		printf("IAC1=0x%08x, ", val);
-		retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC2, &val, 32);
-		if (retval != ERROR_OK)
-			return retval;
-		printf("IAC2=0x%08x, ", val);
-		retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC3, &val, 32);
-		if (retval != ERROR_OK)
-			return retval;
-		printf("IAC3=0x%08x, ", val);
-		retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC4, &val, 32);
-		if (retval != ERROR_OK)
-			return retval;
-		printf("IAC4=0x%08x\n", val);
-		/* end IACs */
+	/* see what's in IACs */
+	retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC1, &val, 32);
+	if (retval != ERROR_OK)
+		return retval;
+	printf("IAC1=0x%08x, ", val);
+	retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC2, &val, 32);
+	if (retval != ERROR_OK)
+		return retval;
+	printf("IAC2=0x%08x, ", val);
+	retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC3, &val, 32);
+	if (retval != ERROR_OK)
+		return retval;
+	printf("IAC3=0x%08x, ", val);
+	retval = mpc5xxx_once_read(jtag_info, MPC57XX_ONCE_IAC4, &val, 32);
+	if (retval != ERROR_OK)
+		return retval;
+	printf("IAC4=0x%08x\n", val);
+	/* end IACs */
 
-		retval = mpc5xxx_once_read(jtag_info, MPC5XXX_ONCE_OCR, &val, 32);
-		if (retval != ERROR_OK)
-			return retval;
-		printf("OCR=0x%08x\n", val);
-	/* end debug */
+	retval = mpc5xxx_once_read(jtag_info, MPC5XXX_ONCE_OCR, &val, 32);
+	if (retval != ERROR_OK)
+		return retval;
+	printf("OCR=0x%08x\n", val);
 
 	retval = mpc5xxx_once_cpuscr_read(jtag_info, &scr);
 	if (retval != ERROR_OK)
@@ -251,8 +334,8 @@ int mpc57xx_exit_debug(struct mpc5xxx_jtag *jtag_info, uint32_t addr, int sw_bp,
 
 	scr.wbbrl = 0;
 	scr.wbbrh = 0;
-	scr.ir = MPC57XX_NOP ;
-	scr.pc = addr - 4 ;
+	scr.ir = MPC57XX_NOP;
+	scr.pc = addr - 4;
 
 	retval = mpc5xxx_once_cpuscr_write(jtag_info, &scr);
 	if (retval != ERROR_OK)
@@ -368,7 +451,7 @@ int mpc57xx_jtag_clr_bps_wps(struct mpc5xxx_jtag *jtag_info)
 	retval = mpc5xxx_once_write(jtag_info, MPC57XX_ONCE_EDBSR0, mask0, 32);
 	if (retval)
 		return retval;
-	exit(1); /* needs extending to other IACs and DACs */
+	printf("needs extending to other IACs and DACs\n");
 
 	return ERROR_OK;
 }

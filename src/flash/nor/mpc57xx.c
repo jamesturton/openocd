@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2015 by James Turton                                    *
+ *   Copyright (C) 2022 by James Turton                                    *
  *   james.turton@gmx.com                                                  *
  *                                                                         *
  *   Copyright (C) 2015 by James Murray                                    *
@@ -198,11 +198,9 @@ static int mpc57xx_protect_check(struct flash_bank *bank)
 
 	uint32_t val[4];
 	for (unsigned int i = 0; i < 4; i++) {
-		retval = target_read_u32(target, mpc57xx_flash_lock_regs[i], &val[i]);
+		retval = target_read_u32(target, mpc57xx_flash_lock_regs[i], val + i);
 		if (retval != ERROR_OK)
 			return retval;
-		// val[i] = be_to_h_u32((uint8_t *)&val[i]);
-		printf("Original lock = 0x%08x\n", val[i]);
 	}
 
 	for (unsigned int s = 0; s < bank->num_sectors; s++) {
@@ -235,7 +233,7 @@ static int mpc57xx_protect(struct flash_bank *bank, int set, unsigned int first,
 
 	// Read LOCK regs first
 	for (i = 0; i < 4; i++) {
-		retval = target_read_u32(target, mpc57xx_flash_lock_regs[i], &val[i]);
+		retval = target_read_u32(target, mpc57xx_flash_lock_regs[i], val + i);
 		if (retval != ERROR_OK)
 			return retval;
 	}
@@ -398,7 +396,7 @@ static int mpc57xx_get_sect(struct flash_bank *bank, uint32_t address, uint32_t 
 static int mpc57xx_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	struct target *target = bank->target;
-	uint32_t words_remaining = (count / 4);
+	uint32_t words_remaining = (count / sizeof(uint32_t));
 	uint32_t bytes_written = 0;
 	uint32_t bytes_remaining = (count & 0x00000007);
 	uint32_t address = bank->base + offset;
@@ -428,7 +426,6 @@ static int mpc57xx_write(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	cur_sec_end = 0;
 
 	while (words_remaining) {
-		uint32_t value, value2;
 
 		if ((address < cur_sec_start) || (address > cur_sec_end)) {
 			printf("Address = 0x%08x\n", address);
@@ -451,32 +448,24 @@ static int mpc57xx_write(struct flash_bank *bank, const uint8_t *buffer, uint32_
 				return retval;
 		}
 
-		if (tail_end) {
-			uint8_t byte_buf[8];
-			LOG_INFO("Tail end data flash, not sure this is correct. Please check.");
-			printf("Handling the stragglers %d\n", bytes_remaining);
-			memset(byte_buf, 0, 8);
-			memcpy(byte_buf, buffer + bytes_written, sizeof(uint32_t));
-			value = be_to_h_u32((uint8_t *)&byte_buf[0]); /* read from buffer BE */
-			value2 = be_to_h_u32((uint8_t *)&byte_buf[4]);
-			words_remaining = 2;
-			bytes_remaining = 0;
-		} else {
-			memcpy(&value, buffer + bytes_written, sizeof(uint32_t));
-			memcpy(&value2, buffer + bytes_written + 4, sizeof(uint32_t));
-			value = be_to_h_u32((uint8_t *)&value); /* swap ends again */
-			value2 = be_to_h_u32((uint8_t *)&value2); /* swap ends again */
-		}
-
 		/* Skip writes if the data is the same as erased flash value */
-		if ((value != 0xffffffff) && (value2 != 0xffffffff)) {
-			retval = target_write_u32(target, address, value); /* Write first 32bits */
+		if ((target_buffer_get_u32(target, buffer + bytes_written) != 0xffffffff) &&
+			(target_buffer_get_u32(target, buffer + bytes_written + sizeof(uint32_t)) != 0xffffffff)) {
+			retval = target_write_memory(target, address, sizeof(uint32_t), 1, buffer + bytes_written); /* Write first 32bits */
 			if (retval != ERROR_OK)
 				return retval;
 
-			retval = target_write_u32(target, address + 4, value2); /* Write second 32bits */
-			if (retval != ERROR_OK)
-				return retval;
+			if (tail_end) {
+				LOG_INFO("Tail end data flash, not sure this is correct. Please check.");
+				printf("Handling the stragglers %d\n", bytes_remaining);
+				words_remaining = 2;
+				bytes_remaining = 0;
+			}
+			else {
+				retval = target_write_memory(target, address + sizeof(uint32_t), sizeof(uint32_t), 1, buffer + bytes_written + sizeof(uint32_t)); /* Write second 32bits */
+				if (retval != ERROR_OK)
+					return retval;
+			}
 
 			retval = target_write_u32(target, MPC57XX_REG_MCR, MPC57XX_REG_MCR_PGM | MPC57XX_REG_MCR_EHV); /* Set EHV */
 			if (retval != ERROR_OK)

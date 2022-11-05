@@ -166,8 +166,8 @@ int mpc5xxx_jtag_access_once(struct mpc5xxx_jtag *jtag_info)
 	/* OnCE uses 10 bits */
 	jtag_info->tap->ir_length = 10;
 
-		/* Read the OnCE JTAG ID for info */
-		res = mpc5xxx_once_read(jtag_info, MPC5XXX_ONCE_DID, &did, 32);
+	/* Read the OnCE JTAG ID for info */
+	res = mpc5xxx_once_read(jtag_info, MPC5XXX_ONCE_DID, &did, 32);
 	if (res)
 		return res;
 
@@ -507,7 +507,7 @@ int mpc5xxx_once_nexus_read(struct mpc5xxx_jtag *jtag_info,
 	}
 	if (((val & MPC5XXX_ONCE_NEXUS_RWCS_MASK) != MPC5XXX_ONCE_NEXUS_RWCS_READOK)
 		|| (count >= READ_MAXLOOPS)) {
-		LOG_ERROR("Failed to read memory!");
+		LOG_ERROR("Failed to read memory @ %08x!", addr);
 		return ERROR_FAIL;
 	}
 
@@ -515,23 +515,8 @@ int mpc5xxx_once_nexus_read(struct mpc5xxx_jtag *jtag_info,
 	 * next is read */
 	mpc5xxx_jtag_write_data(jtag_info, MPC5XXX_ONCE_NEXUS_RWD, 8);
 
-	mpc5xxx_jtag_read_data(jtag_info, &val, size);
+	mpc5xxx_jtag_read_data(jtag_info, value, size);
 
-	/* Byte swap for endianism target is BE, but Nexus reads are
-	 * supposed to be LE. Appears that something is converting
-	 * in the middle?
-	 * How do we know that host is LE ?
-	 */
-	if (size == 8) {
-		*value = val;
-	} else if (size == 16) {
-		*value = ((val & 0x00ff) << 8) | ((val & 0xff00) >> 8);
-	} else {
-		*value = ((val & 0x000000ff) << 24)
-				| ((val & 0x0000ff00) << 8)
-				| ((val & 0x00ff0000) >> 8)
-				| ((val & 0xff000000) >> 24);
-	}
 	return ERROR_OK;
 }
 
@@ -540,22 +525,6 @@ int mpc5xxx_once_nexus_write(struct mpc5xxx_jtag *jtag_info,
 {
 	int res;
 	uint32_t val, count;
-
-	/* Byte swap for endianism target is BE, but Nexus reads are
-	 * supposed to be LE. Appears that something is converting
-	 * in the middle?
-	 * How do we know that host is LE ?
-	 */
-	if (size == 8) {
-		/* no change */
-	} else if (size == 16) {
-		value = ((value & 0x00ff) << 8) | ((value & 0xff00) >> 8);
-	} else {
-		value = ((value & 0x000000ff) << 24)
-				| ((value & 0x0000ff00) << 8)
-				| ((value & 0x00ff0000) >> 8)
-				| ((value & 0xff000000) >> 24);
-	}
 
 	res = mpc5xxx_jtag_access_once(jtag_info);
 	if (res)

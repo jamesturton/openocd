@@ -219,7 +219,7 @@ struct reg_cache *mpc5xxx_build_reg_cache(struct target *target)
 		arch_info[i].mpc5xxx_common = mpc5xxx;
 		reg_list[i].name = mpc5xxx_core_reg_list[i];
 		reg_list[i].size = 32;
-		reg_list[i].value = calloc(1, 4);
+		reg_list[i].value = calloc(1, sizeof(uint32_t));
 		reg_list[i].dirty = false;
 		reg_list[i].valid = false;
 		reg_list[i].exist = true;
@@ -258,22 +258,20 @@ int mpc5xxx_read_memory(struct target *target, target_addr_t address,
 		count);
 
 	/* sanitize arguments */
-	if (((size != 4) && (size != 2) && (size != 1)) || (count == 0) || !(buffer))
+	if (((size != sizeof(uint32_t)) && (size != sizeof(uint16_t)) && (size != sizeof(uint8_t))) || (count == 0) || !(buffer))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	if (((size == 4) && (address & 0x3u)) || ((size == 2) && (address & 0x1u)))
+	if (((size == sizeof(uint32_t)) && (address & 0x3u)) || ((size == sizeof(uint16_t)) && (address & 0x1u)))
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 
 	switch (size) {
-		case 4:
-			return mpc5xxx_jtag_read_memory32(&mpc5xxx->jtag, address, count,
-				(uint32_t *)(void *)buffer);
+		case sizeof(uint32_t):
+			return mpc5xxx_jtag_read_memory32(&mpc5xxx->jtag, address, count, (uint32_t *)(void *)buffer);
 			break;
-		case 2:
-			return mpc5xxx_jtag_read_memory16(&mpc5xxx->jtag, address, count,
-				(uint16_t *)(void *)buffer);
+		case sizeof(uint16_t):
+			return mpc5xxx_jtag_read_memory16(&mpc5xxx->jtag, address, count, (uint16_t *)(void *)buffer);
 			break;
-		case 1:
+		case sizeof(uint8_t):
 			return mpc5xxx_jtag_read_memory8(&mpc5xxx->jtag, address, count, buffer);
 			break;
 		default:
@@ -294,22 +292,20 @@ int mpc5xxx_write_memory(struct target *target, target_addr_t address,
 		count);
 
 	/* sanitize arguments */
-	if (((size != 4) && (size != 2) && (size != 1)) || (count == 0) || !(buffer))
+	if (((size != sizeof(uint32_t)) && (size != sizeof(uint16_t)) && (size != sizeof(uint8_t))) || (count == 0) || !(buffer))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	if (((size == 4) && (address & 0x3u)) || ((size == 2) && (address & 0x1u)))
+	if (((size == sizeof(uint32_t)) && (address & 0x3u)) || ((size == sizeof(uint16_t)) && (address & 0x1u)))
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 
 	switch (size) {
-		case 4:
-			return mpc5xxx_jtag_write_memory32(&mpc5xxx->jtag, address, count,
-				(uint32_t *)(void *)buffer);
+		case sizeof(uint32_t):
+			return mpc5xxx_jtag_write_memory32(&mpc5xxx->jtag, address, count, (uint32_t *)(void *)buffer);
 			break;
-		case 2:
-			return mpc5xxx_jtag_write_memory16(&mpc5xxx->jtag, address, count,
-				(uint16_t *)(void *)buffer);
+		case sizeof(uint16_t):
+			return mpc5xxx_jtag_write_memory16(&mpc5xxx->jtag, address, count, (uint16_t *)(void *)buffer);
 			break;
-		case 1:
+		case sizeof(uint8_t):
 			return mpc5xxx_jtag_write_memory8(&mpc5xxx->jtag, address, count, buffer);
 			break;
 		default:
@@ -392,16 +388,12 @@ int mpc5xxx_jtag_read_memory32(struct mpc5xxx_jtag *jtag_info,
 	uint32_t addr, int count, uint32_t *buffer)
 {
 	int i, retval;
-	uint32_t data;
 
 	for (i = 0; i < count; i++) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i*4, &data, 32);
+		retval = mpc5xxx_once_nexus_read(jtag_info, addr + (i * sizeof(uint32_t)), buffer + i, 32);
 
 		if (retval != ERROR_OK)
 			return retval;
-
-		/* XXX: Assume PPC32 is BE */
-		buffer[i] = be_to_h_u32((uint8_t *)&data);
 	}
 
 	return ERROR_OK;
@@ -410,47 +402,29 @@ int mpc5xxx_jtag_read_memory32(struct mpc5xxx_jtag *jtag_info,
 int mpc5xxx_jtag_read_memory16(struct mpc5xxx_jtag *jtag_info,
 	uint32_t addr, int count, uint16_t *buffer)
 {
-	int i, retval;
+	int i = 0;
+	int retval;
 	uint32_t data;
 
-	i = 0;
-
-	/* any unaligned half-words? */
-	if (addr & 3) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i*2, &data, 32);
+	while (i < count) {
+		retval = mpc5xxx_once_nexus_read(jtag_info, addr + (i * sizeof(uint16_t)), &data, 32);
 
 		if (retval != ERROR_OK)
 			return retval;
 
-		/* XXX: Assume PPC32 is BE */
-		data = be_to_h_u32((uint8_t *)&data);
-		buffer[i] = (data >> 16) & 0xffff;
-		i++;
-	}
-
-	/* read all complete words */
-	for (; i < (count & ~1); i += 2) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i*2, &data, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		/* XXX: Assume PPC32 is BE */
-		data = be_to_h_u32((uint8_t *)&data);
-		buffer[i] = data & 0xffff;
-		buffer[i+1] = (data >> 16) & 0xffff;
-	}
-
-	/* last halfword */
-	if (i < count) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i*2, &data, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		/* XXX: Assume PPC32 is BE */
-		data = be_to_h_u32((uint8_t *)&data);
-		buffer[i] = data & 0xffff;
+		/* any unaligned halfwords? */
+		if (i == 0 && addr & 3) {
+			buffer[i++] = (data >> 16) & 0xffff;
+		}
+		/* last halfword */
+		else if (count - i == 1) {
+			buffer[i++] = data & 0xffff;
+		}
+		/* read all complete words */
+		else {
+			buffer[i++] = data & 0xffff;
+			buffer[i++] = (data >> 16) & 0xffff;
+		}
 	}
 
 	return ERROR_OK;
@@ -459,41 +433,32 @@ int mpc5xxx_jtag_read_memory16(struct mpc5xxx_jtag *jtag_info,
 int mpc5xxx_jtag_read_memory8(struct mpc5xxx_jtag *jtag_info,
 	uint32_t addr, int count, uint8_t *buffer)
 {
-	int i, j, retval;
+	int i = 0;
+	int retval;
 	uint8_t data[4];
-	i = 0;
 
-	/* Do we have non-aligned bytes? */
-	if (addr & 3) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i, (uint32_t *)(void *)data, 32);
+	while (i < count) {
+		retval = mpc5xxx_once_nexus_read(jtag_info, addr + (i * sizeof(uint8_t)), (uint32_t *)(void *)data, 32);
 
 		if (retval != ERROR_OK)
 			return retval;
 
-		for (j = addr & 3; (j < 4) && (i < count); j++, i++)
-			buffer[i] = data[3-j];
-	}
-
-	/* read all complete words */
-	for (; i < (count & ~3); i += 4) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i, (uint32_t *)(void *)data, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		for (j = 0; j < 4; j++)
-			buffer[i+j] = data[3-j];
-	}
-
-	/* remaining bytes */
-	if (i < count) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i, (uint32_t *)(void *)data, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		for (j = 0; i + j < count; j++)
-			buffer[i+j] = data[3-j];
+		/* Do we have non-aligned bytes at start? */
+		if (i == 0 && addr & 3) {
+			int len = MIN(4 - (addr & 3), count);
+			memcpy(buffer, data + (addr & 3), len);
+			i += len;
+		}
+		/* remaining bytes */
+		else if ((count - i) < 4) {
+			memcpy(buffer + i, data, count - i);
+			i += count - i;
+		}
+		/* read all complete words */
+		else {
+			memcpy(buffer + i, data, 4);
+			i += 4;
+		}
 	}
 
 	return ERROR_OK;
@@ -503,16 +468,12 @@ int mpc5xxx_jtag_write_memory32(struct mpc5xxx_jtag *jtag_info,
 	uint32_t addr, int count, const uint32_t *buffer)
 {
 	int i, retval;
-	uint32_t data;
 
 	for (i = 0; i < count; i++) {
-		/* XXX: Assume PPC32 is BE */
-		h_u32_to_be((uint8_t *)&data, buffer[i]);
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr + i*4, data, 32);
+		retval = mpc5xxx_once_nexus_write(jtag_info, addr + (i * sizeof(uint32_t)), buffer[i], 32);
 
 		if (retval != ERROR_OK)
 			return retval;
-
 	}
 
 	return ERROR_OK;
@@ -521,62 +482,33 @@ int mpc5xxx_jtag_write_memory32(struct mpc5xxx_jtag *jtag_info,
 int mpc5xxx_jtag_write_memory16(struct mpc5xxx_jtag *jtag_info,
 	uint32_t addr, int count, const uint16_t *buffer)
 {
-	int i, retval;
+	int i = 0;
+	int retval;
 	uint32_t data;
-	uint32_t data_out;
 
-	i = 0;
-
-	/*
-	 * Do we have any non-aligned half-words?
-	 */
-	if (addr & 3) {
-		/*
-		 * _read will read whole world, no need to fiddle
-		 * with address. It will be truncated in set_addr ???? JSM
-		 */
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr, &data, 32);
+	while (i < count) {
+		retval = mpc5xxx_once_nexus_read(jtag_info, addr + (i * sizeof(uint16_t)), &data, 32);
 
 		if (retval != ERROR_OK)
 			return retval;
 
-		data = be_to_h_u32((uint8_t *)&data);
-		data = (buffer[i] << 16) | (data & 0xffff);
-		h_u32_to_be((uint8_t *)&data_out, data);
+		/* Do we have non-aligned bytes at start? */
+		if (i == 0 && addr & 3) {
+			data &= 0xffff;
+			data |= buffer[i++] << 16;
+		}
+		/* last halfword */
+		else if (count - i == 1) {
+			data &= ~0xffff;
+			data |= buffer[i++];
+		}
+		/* write all complete words */
+		else {
+			data = buffer[i++];
+			data |= buffer[i++] << 16;
+		}
 
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr, data_out, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		i++;
-	}
-
-	/* write all complete words */
-	for (; i < (count & ~1); i += 2) {
-		/* XXX: Assume PPC32 is BE */
-		data = (buffer[i+1] << 16) | buffer[i];
-		h_u32_to_be((uint8_t *)&data_out, data);
-
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr + i*2, data_out, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-	}
-
-	/* last halfword */
-	if (i < count) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i*2, &data, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		data = be_to_h_u32((uint8_t *)&data);
-		data &= ~0xffff;
-		data |= buffer[i];
-		h_u32_to_be((uint8_t *)&data_out, data);
-
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr + i*2, data_out, 32);
+		retval = mpc5xxx_once_nexus_write(jtag_info, addr + (i * sizeof(uint16_t)), data, 32);
 
 		if (retval != ERROR_OK)
 			return retval;
@@ -588,72 +520,39 @@ int mpc5xxx_jtag_write_memory16(struct mpc5xxx_jtag *jtag_info,
 int mpc5xxx_jtag_write_memory8(struct mpc5xxx_jtag *jtag_info,
 	uint32_t addr, int count, const uint8_t *buffer)
 {
-	int i, j, retval;
+	int i = 0;
+	int j;
+	int retval;
 	uint32_t data;
-	uint32_t data_out;
 
-	i = 0;
-
-	/*
-	 * Do we have any non-aligned bytes?
-	 */
-	if (addr & 3) {
-		/*
-		 * mwa_read will read whole world, no nead to fiddle
-		 * with address. It will be truncated in set_addr
-		 */
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr, &data, 32);
+	while (i < count) {
+		retval = mpc5xxx_once_nexus_read(jtag_info, addr + (i * sizeof(uint8_t)), &data, 32);
 
 		if (retval != ERROR_OK)
 			return retval;
 
-		data = be_to_h_u32((uint8_t *)&data);
-		for (j = addr & 3; (j < 4) && (i < count); j++, i++) {
-			data &= ~(0xff << j*8);
-			data |= (buffer[i] << j*8);
+		/* Do we have non-aligned bytes at start? */
+		if (i == 0 && addr & 3) {
+			for (j = addr & 3; (j < 4) && (i < count); j++, i++) {
+				data &= ~(0xff << j*8);
+				data |= (buffer[i] << j*8);
+			}
+		}
+		/* Write trailing bytes */
+		else if ((count - i) < 4) {
+			for (j = 0; i < count; j++, i++) {
+				data &= ~(0xff << j*8);
+				data |= (buffer[i] << j*8);
+			}
+		}
+		/* Write all complete words */
+		else {
+			data = 0;
+			for (j = 0; j < 4; j++, i++)
+				data |= (buffer[i] << j*8);
 		}
 
-		h_u32_to_be((uint8_t *)&data_out, data);
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr, data_out, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-	}
-
-
-	/* write all complete words */
-	for (; i < (count & ~3); i += 4) {
-		data = 0;
-
-		for (j = 0; j < 4; j++)
-			data |= (buffer[j+i] << j*8);
-
-		h_u32_to_be((uint8_t *)&data_out, data);
-
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr + i, data_out, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-	}
-
-	/*
-	 * Write trailing bytes
-	 */
-	if (i < count) {
-		retval = mpc5xxx_once_nexus_read(jtag_info, addr + i, &data, 32);
-
-		if (retval != ERROR_OK)
-			return retval;
-
-		data = be_to_h_u32((uint8_t *)&data);
-		for (j = 0; i < count; j++, i++) {
-			data &= ~(0xff << j*8);
-			data |= (buffer[j+i] << j*8);
-		}
-
-		h_u32_to_be((uint8_t *)&data_out, data);
-
-		retval = mpc5xxx_once_nexus_write(jtag_info, addr+i, data_out, 32);
+		retval = mpc5xxx_once_nexus_write(jtag_info, addr + (i * sizeof(uint8_t)), data, 32);
 
 		if (retval != ERROR_OK)
 			return retval;

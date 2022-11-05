@@ -99,8 +99,8 @@ static int mpc56xx_debug_entry(struct target *target, int async_flag)
 	mpc56xx_save_context(target);
 	/* Force to say we are halted. Debug/halt appear to be synonymous? */
 	target->state = TARGET_HALTED;
-	mpc56xx->ctl_on_entry = mpc56xx->saved_ctl ;
-	mpc56xx->msr_on_entry = mpc56xx->saved_msr ;
+	mpc56xx->ctl_on_entry = mpc56xx->saved_cpuscr.ctl ;
+	mpc56xx->msr_on_entry = mpc56xx->saved_cpuscr.msr ;
 
 
 
@@ -826,7 +826,7 @@ static int mpc56xx_step(struct target *target, int current,
 	keep_alive();
 
 	retval = mpc56xx_exec_inst(&mpc56xx->jtag, opcode, 0, &val,
-			(mpc56xx->saved_ctl & 0xFFFF0000) | MPC56XX_EI_INC);
+			(mpc56xx->saved_cpuscr.ctl & 0xFFFF0000) | MPC56XX_EI_INC);
 
 	if (retval)
 		return retval;
@@ -1089,11 +1089,11 @@ int mpc56xx_save_context(struct target *target)
 
 	/*printf("save_context\n");*/
 	keep_alive();
-	retval = mpc56xx_jtag_read_regs(&mpc56xx->jtag, mpc56xx->core_regs, &mpc56xx->saved_ctl);
+	retval = mpc56xx_jtag_read_regs(&mpc56xx->jtag, mpc56xx->core_regs, &mpc56xx->saved_cpuscr.ctl);
 	if (retval != ERROR_OK)
 		return retval;
 
-	mpc56xx->saved_msr = mpc56xx->core_regs[MPC5XXX_REG_MSR] ;
+	mpc56xx->saved_cpuscr.msr = mpc56xx->core_regs[MPC5XXX_REG_MSR] ;
 
 	/* now we saved the sate of the msr before we disabled interrupts,
 	 * we can stop lying about disabled interrupts - otherwise
@@ -1137,7 +1137,7 @@ int mpc56xx_restore_context(struct target *target)
 	retval = mpc5xxx_once_cpuscr_read(&mpc56xx->jtag, &scr);
 	if (retval)
 		return retval;
-	scr.ctl = mpc56xx->saved_ctl;
+	scr.ctl = mpc56xx->saved_cpuscr.ctl;
 	return mpc5xxx_once_cpuscr_write(&mpc56xx->jtag, &scr);
 }
 
