@@ -338,7 +338,7 @@ static int mpc57xx_erase(struct flash_bank *bank, unsigned int first, unsigned i
 		return retval;
 
 	/* Wait for Done=1 */
-	retry = 10000; /* arbitrary limit, can take some time */
+	retry = 1000000; /* arbitrary limit, can take some time */
 	val = 0;
 	while (retry && ((val & MPC57XX_REG_MCR_DONE) == 0)) {
 		retval = target_read_u32(target, MPC57XX_REG_MCR, &val);
@@ -565,7 +565,7 @@ static int mpc57xx_info(struct flash_bank *bank, struct command_invocation *cmd)
 	return ERROR_OK;
 }
 
-COMMAND_HANDLER(mpc57xx_handle_unlock_command)
+COMMAND_HANDLER(mpc57xx_handle_mass_erase_command)
 {
 	if (CMD_ARGC < 1) {
 		command_print(CMD, "mpc57xx unlock <bank>");
@@ -577,32 +577,16 @@ COMMAND_HANDLER(mpc57xx_handle_unlock_command)
 	if (ERROR_OK != retval)
 		return retval;
 
-	// uint32_t addr;
-	// COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], addr);
-	// uint32_t foo;
-	// uint32_t block = mpc57xx_get_sect(bank, addr, &foo, &foo);
-	// printf("Address: 0x%08x in block: 0x%08x\n", addr, block);
-	// mpc57xx_erase(bank, block, block);
-
-	// uint32_t block;
-	// COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], block);
-	// for (block = 0; block < 38; block++)
-	// mpc57xx_unlock_block(bank, block);
-
-	uint8_t buf[] = {0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8};
-	mpc57xx_write(bank, buf, 0x005B0000, 8);
-
-	printf("Not handled!\n");
-	return ERROR_FAIL;
+	return mpc57xx_erase(bank, 0, bank->num_sectors - 1);
 }
 
 static const struct command_registration mpc57xx_exec_command_handlers[] = {
 	{
-		.name = "unlock",
-		.handler = mpc57xx_handle_unlock_command,
+		.name = "mass_erase",
+		.handler = mpc57xx_handle_mass_erase_command,
 		.mode = COMMAND_EXEC,
 		.usage = "[bank_id]",
-		.help = "Unlock/Erase entire device.",
+		.help = "Erase entire device.",
 	},
 	COMMAND_REGISTRATION_DONE
 };
